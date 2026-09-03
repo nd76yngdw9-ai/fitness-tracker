@@ -88,7 +88,70 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     background: var(--card-bg);
 }
 
-.form button {
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.dashboard-header h1 { margin-bottom: 0; }
+
+.settings-link {
+    text-decoration: none;
+    font-size: 1.3rem;
+    padding: 6px;
+}
+
+.satz-zeile {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.satz-feld {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.satz-feld label {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.satz-feld input {
+    font-size: 1rem;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-bg);
+}
+
+.satz-entfernen-btn {
+    flex-shrink: 0;
+    width: 40px;
+    height: 44px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 10px;
+    font-size: 1.1rem;
+    color: var(--muted);
+}
+
+.secondary-button {
+    margin-top: 6px;
+    padding: 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--card-bg);
+    border: 1px solid var(--primary);
+    border-radius: 10px;
+}
+
+.form button[type="submit"] {
     margin-top: 20px;
     padding: 14px;
     font-size: 1rem;

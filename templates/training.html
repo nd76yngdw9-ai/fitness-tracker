@@ -4,23 +4,68 @@
 
 <h1>Training eintragen</h1>
 
-<form method="post" class="form">
+<form method="post" class="form" id="training-form">
     <label for="datum">Datum</label>
     <input type="date" id="datum" name="datum" value="{{ heute }}" required>
 
     <label for="uebung">Übung</label>
-    <input type="text" id="uebung" name="uebung" placeholder="z.B. Bankdrücken" required>
+    <input type="text" id="uebung" name="uebung" list="uebungen-liste"
+           placeholder="Übung wählen oder neue eintippen" required>
+    <datalist id="uebungen-liste">
+        {% for u in uebungen %}
+        <option value="{{ u['name'] }}">
+        {% endfor %}
+    </datalist>
 
-    <label for="gewicht">Gewicht (kg)</label>
-    <input type="text" inputmode="decimal" id="gewicht" name="gewicht" placeholder="z.B. 120">
+    <div id="saetze-liste" style="margin-top: 14px;">
+        <!-- Sätze werden hier per JavaScript eingefügt -->
+    </div>
 
-    <label for="wiederholungen">Wiederholungen</label>
-    <input type="number" id="wiederholungen" name="wiederholungen" placeholder="z.B. 5">
+    <button type="button" id="satz-hinzufuegen-btn" class="secondary-button">
+        + Satz hinzufügen
+    </button>
 
-    <label for="saetze">Sätze</label>
-    <input type="number" id="saetze" name="saetze" placeholder="z.B. 4">
-
-    <button type="submit">Speichern</button>
+    <button type="submit">Training speichern</button>
 </form>
+
+<template id="satz-zeile-vorlage">
+    <div class="satz-zeile">
+        <div class="satz-feld">
+            <label>Gewicht (kg)</label>
+            <input type="text" inputmode="decimal" name="gewicht[]" placeholder="z.B. 120">
+        </div>
+        <div class="satz-feld">
+            <label>Wdh.</label>
+            <input type="number" name="wiederholungen[]" placeholder="z.B. 5">
+        </div>
+        <button type="button" class="satz-entfernen-btn" title="Satz entfernen">&times;</button>
+    </div>
+</template>
+
+<script>
+    const saetzeListe = document.getElementById("saetze-liste");
+    const vorlage = document.getElementById("satz-zeile-vorlage");
+    const hinzufuegenBtn = document.getElementById("satz-hinzufuegen-btn");
+
+    function satzZeileHinzufuegen() {
+        const neueZeile = vorlage.content.cloneNode(true);
+        neueZeile.querySelector(".satz-entfernen-btn").addEventListener("click", function (ereignis) {
+            ereignis.target.closest(".satz-zeile").remove();
+        });
+        saetzeListe.appendChild(neueZeile);
+    }
+
+    hinzufuegenBtn.addEventListener("click", satzZeileHinzufuegen);
+
+    // Beim Laden der Seite direkt mit 3 leeren Sätzen starten,
+    // das deckt den häufigsten Fall ab (3 Arbeitssätze).
+    satzZeileHinzufuegen();
+    satzZeileHinzufuegen();
+    satzZeileHinzufuegen();
+</script>
+
+<p class="muted" style="margin-top: 16px;">
+    <a href="{{ url_for('training_verlauf') }}" class="link">Verlauf &amp; Maximalleistung ansehen &rarr;</a>
+</p>
 
 {% endblock %}

@@ -2,8 +2,9 @@
 # - "tracker-benedikt" auf Port 5000, eigene Datenbank, deine Ziele
 # - "tracker-freund" auf Port 5001, eigene Datenbank, eigene Ziele
 #
-# Beide werden aus demselben Code gebaut (build: .), laufen aber als
-# unabhängige Container mit eigenem Volume -- die Daten vermischen sich nie.
+# Die Werte unten (ZIELGEWICHT_BENEDIKT usw.) lassen sich in Portainer unter
+# "Environment variables" bearbeiten, OHNE dass du den Code auf GitHub
+# anfassen musst. Nach dem Ändern dort einfach "Update the stack" klicken.
 
 services:
   tracker-benedikt:
@@ -13,8 +14,8 @@ services:
     ports:
       - "5000:5000"
     environment:
-      ZIELGEWICHT_KG: "100"
-      KALORIENZIEL: "3600"
+      ZIELGEWICHT_KG: ${ZIELGEWICHT_BENEDIKT:-100}
+      KALORIENZIEL: ${KALORIENZIEL_BENEDIKT:-3600}
     volumes:
       - tracker-data-benedikt:/data
 
@@ -25,9 +26,8 @@ services:
     ports:
       - "5001:5000"
     environment:
-      # Hier die Werte deines Freundes eintragen, bevor du deployst:
-      ZIELGEWICHT_KG: "80"
-      KALORIENZIEL: "2800"
+      ZIELGEWICHT_KG: ${ZIELGEWICHT_FREUND:-80}
+      KALORIENZIEL: ${KALORIENZIEL_FREUND:-2800}
     volumes:
       - tracker-data-freund:/data
 

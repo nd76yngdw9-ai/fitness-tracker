@@ -2,7 +2,10 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 
-<h1>Dein Fortschritt</h1>
+<div class="dashboard-header">
+    <h1>Dein Fortschritt</h1>
+    <a href="{{ url_for('einstellungen') }}" class="settings-link" title="Einstellungen">⚙️</a>
+</div>
 
 <div class="card">
     <h2>Gewicht</h2>
@@ -40,13 +43,12 @@
         {% for eintrag in letzte_trainings %}
             <li>
                 <strong>{{ eintrag["uebung"] }}</strong>
-                {% if eintrag["gewicht"] %}– {{ eintrag["gewicht"] }} kg{% endif %}
-                {% if eintrag["wiederholungen"] %}× {{ eintrag["wiederholungen"] }}{% endif %}
-                {% if eintrag["saetze"] %}({{ eintrag["saetze"] }} Sätze){% endif %}
-                <span class="muted">– {{ eintrag["datum"] }}</span>
+                <span class="muted">– {{ eintrag["datum"] }}</span><br>
+                {% for satz in eintrag["saetze"] %}{{ satz["gewicht"] }}kg×{{ satz["wiederholungen"] }}{% if not loop.last %}, {% endif %}{% endfor %}
             </li>
         {% endfor %}
         </ul>
+        <a href="{{ url_for('training_verlauf') }}" class="link">Verlauf &amp; Maximalleistung &rarr;</a>
     {% else %}
         <p class="muted">Noch kein Training eingetragen.</p>
     {% endif %}
