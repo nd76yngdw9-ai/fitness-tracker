@@ -606,8 +606,9 @@ def training_uebung_loeschen(einheit_id, uebung):
 @app.route("/verlauf")
 def verlauf():
     """Eigener Menüpunkt: zeigt sowohl die Liste vergangener Trainings als
-    auch, für ausgewählte Übungen, den grafischen Verlauf der berechneten
-    Maximalleistung über die Zeit."""
+    auch, für ausgewählte Übungen, den grafischen UND tabellarischen
+    Verlauf -- sowohl die berechnete Maximalleistung (e1RM) als auch die
+    tatsächlich bewegten Gewichte je Satz."""
     conn = get_db()
 
     einheiten_rohdaten = conn.execute(
@@ -628,36 +629,61 @@ def verlauf():
     alle_uebungen = conn.execute("SELECT name FROM uebungen ORDER BY name").fetchall()
     ausgewaehlte_uebungen = request.args.getlist("uebung")
 
-    chart_daten = {}
+    uebungs_daten = []
+    alle_chart_labels = set()
+
     for name in ausgewaehlte_uebungen:
         saetze = conn.execute("""
-            SELECT te.datum AS datum, ts.gewicht, ts.wiederholungen
+            SELECT te.datum AS datum, ts.gewicht, ts.wiederholungen, ts.satznummer
             FROM trainingssatz ts
             JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
             WHERE ts.uebung = ?
-            ORDER BY te.datum
+            ORDER BY te.datum, ts.satznummer
         """, (name,)).fetchall()
 
-        # Pro Tag die beste (höchste) berechnete Maximalleistung nehmen,
-        # falls an dem Tag mehrere Sätze dieser Übung gemacht wurden.
-        beste_je_tag = {}
+        tabellen_zeilen = []
+        rohdaten_punkte = []  # jeder einzelne Satz als Punkt fürs Diagramm
+        beste_je_tag = {}     # höchste berechnete Maximalleistung pro Tag
+
         for satz in saetze:
             e1rm = berechne_e1rm(satz["gewicht"], satz["wiederholungen"])
+            tabellen_zeilen.append({
+                "datum": satz["datum"],
+                "satznummer": satz["satznummer"],
+                "gewicht": satz["gewicht"],
+                "wiederholungen": satz["wiederholungen"],
+                "e1rm": e1rm,
+            })
+            rohdaten_punkte.append({"datum": satz["datum"], "wert": satz["gewicht"]})
+            alle_chart_labels.add(satz["datum"])
             if satz["datum"] not in beste_je_tag or e1rm > beste_je_tag[satz["datum"]]:
                 beste_je_tag[satz["datum"]] = e1rm
 
-        chart_daten[name] = [
-            {"datum": tag, "e1rm": beste_je_tag[tag]} for tag in sorted(beste_je_tag)
-        ]
+        e1rm_punkte = [{"datum": tag, "wert": beste_je_tag[tag]} for tag in sorted(beste_je_tag)]
+
+        uebungs_daten.append({
+            "name": name,
+            "bestleistung": max(beste_je_tag.values()) if beste_je_tag else 0,
+            "tabellen_zeilen": list(reversed(tabellen_zeilen)),  # neueste zuerst
+            "e1rm_punkte": e1rm_punkte,
+            "rohdaten_punkte": rohdaten_punkte,
+        })
 
     conn.close()
+
+    chart_daten = {
+        u["name"]: {"e1rm": u["e1rm_punkte"], "rohdaten": u["rohdaten_punkte"]}
+        for u in uebungs_daten
+    }
 
     return render_template(
         "verlauf.html",
         einheiten=einheiten,
         alle_uebungen=alle_uebungen,
         ausgewaehlte_uebungen=ausgewaehlte_uebungen,
+        uebungs_daten=uebungs_daten,
         chart_daten_json=json.dumps(chart_daten, ensure_ascii=False),
+        chart_labels_json=json.dumps(sorted(alle_chart_labels)),
     )
 
 

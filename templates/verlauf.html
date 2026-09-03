@@ -36,39 +36,82 @@
     <button type="submit" style="margin-top: 14px;">Anzeigen</button>
 </form>
 
-{% if ausgewaehlte_uebungen %}
+{% if uebungs_daten %}
 <div class="card chart-card">
     <canvas id="verlauf-chart"></canvas>
+    <p class="muted" style="margin-top: 10px;">
+        Durchgezogene Linie = berechnete Maximalleistung (e1RM) &middot;
+        Punkte = tatsächlich bewegtes Gewicht je Satz
+    </p>
 </div>
+
+{% for u in uebungs_daten %}
+<div class="card">
+    <h2>{{ u["name"] }}</h2>
+    <p class="big-number">{{ u["bestleistung"] }} kg</p>
+    <p class="muted">Berechnete Maximalleistung (geschätztes 1-Wdh.-Max)</p>
+
+    <table class="table" style="margin-top: 10px;">
+        <tr><th>Datum</th><th>Satz</th><th>Gewicht</th><th>Wdh.</th><th>e1RM</th></tr>
+        {% for zeile in u["tabellen_zeilen"] %}
+        <tr>
+            <td>{{ zeile["datum"] }}</td>
+            <td>{{ zeile["satznummer"] }}</td>
+            <td>{{ zeile["gewicht"] }} kg</td>
+            <td>{{ zeile["wiederholungen"] }}</td>
+            <td>{{ zeile["e1rm"] }} kg</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endfor %}
 {% endif %}
 
 {% endblock %}
 
 {% block extra_scripts %}
-{% if ausgewaehlte_uebungen %}
+{% if uebungs_daten %}
 <script>
     const chartDaten = {{ chart_daten_json | safe }};
+    const chartLabels = {{ chart_labels_json | safe }};
     const farben = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#9333ea", "#0891b2"];
 
-    const datensaetze = Object.keys(chartDaten).map(function (name, index) {
-        return {
-            label: name,
-            data: chartDaten[name].map(function (punkt) {
-                return { x: punkt.datum, y: punkt.e1rm };
-            }),
-            borderColor: farben[index % farben.length],
-            backgroundColor: farben[index % farben.length],
+    const datensaetze = [];
+    Object.keys(chartDaten).forEach(function (name, index) {
+        const farbe = farben[index % farben.length];
+
+        // Linie: berechnete Maximalleistung (e1RM), ein Wert pro Tag
+        datensaetze.push({
+            label: name + " (berechnetes Max)",
+            data: chartDaten[name].e1rm.map(function (p) { return { x: p.datum, y: p.wert }; }),
+            borderColor: farbe,
+            backgroundColor: farbe,
             tension: 0.2,
-        };
+            pointRadius: 3,
+        });
+
+        // Punkte: jeder einzelne Satz mit seinem tatsächlichen Gewicht
+        datensaetze.push({
+            label: name + " (einzelne Sätze)",
+            data: chartDaten[name].rohdaten.map(function (p) { return { x: p.datum, y: p.wert }; }),
+            borderColor: farbe,
+            backgroundColor: farbe,
+            showLine: false,
+            pointStyle: "circle",
+            pointRadius: 4,
+            pointBackgroundColor: "transparent",
+            pointBorderColor: farbe,
+            pointBorderWidth: 1.5,
+        });
     });
 
     new Chart(document.getElementById("verlauf-chart"), {
         type: "line",
-        data: { datasets: datensaetze },
+        data: { labels: chartLabels, datasets: datensaetze },
         options: {
             scales: {
                 x: { type: "category", title: { display: true, text: "Datum" } },
-                y: { title: { display: true, text: "Berechnete Maximalleistung (kg)" } },
+                y: { title: { display: true, text: "Gewicht (kg)" } },
             },
         },
     });
