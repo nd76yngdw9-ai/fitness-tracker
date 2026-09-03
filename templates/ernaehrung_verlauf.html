@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Ernährungsverlauf{% endblock %}
+{% block content %}
+
+<h1>Ernährungsverlauf</h1>
+
+{% if eintraege %}
+<table class="table">
+    <tr><th>Datum</th><th>kcal</th><th></th></tr>
+    {% for e in eintraege %}
+    <tr>
+        <td>{{ e["datum"] }}</td>
+        <td>{{ e["kalorien"] }}</td>
+        <td>
+            <a href="{{ url_for('ernaehrung', datum=e['datum']) }}" class="link">Bearbeiten</a>
+            <form method="post" action="{{ url_for('ernaehrung_loeschen', datum=e['datum']) }}"
+                  onsubmit="return confirm('Eintrag löschen?');" class="inline-form">
+                <button type="submit" class="danger-link">Löschen</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<p class="muted">Noch keine Einträge.</p>
+{% endif %}
+
+<a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
+
+{% endblock %}

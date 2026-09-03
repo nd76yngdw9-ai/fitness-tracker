@@ -151,6 +151,58 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     border-radius: 10px;
 }
 
+.danger-link {
+    background: none;
+    border: none;
+    color: #dc2626;
+    font-size: 0.85rem;
+    padding: 6px 0;
+    text-decoration: underline;
+}
+
+.inline-form {
+    display: inline;
+    margin-left: 8px;
+}
+
+.checkbox-label {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px !important;
+    font-size: 0.95rem;
+    color: var(--text);
+}
+
+.section-heading {
+    margin-top: 24px;
+    font-size: 1.1rem;
+    color: var(--text);
+}
+
+.chart-card {
+    margin-top: 16px;
+}
+
+.add-uebung-button {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    margin-bottom: 14px;
+}
+
+.fertig-link {
+    display: block;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.letzte-leistung {
+    min-height: 1.2em;
+    margin-top: 6px;
+}
+
 .form button[type="submit"] {
     margin-top: 20px;
     padding: 14px;

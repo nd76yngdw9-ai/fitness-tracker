@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Übung hinzufügen{% endblock %}
+{% block content %}
+
+<h1>Übung hinzufügen</h1>
+<p class="muted">Training vom {{ einheit["datum"] }}</p>
+
+<form method="post" class="form" id="uebung-form">
+    <label for="uebung">Übung</label>
+    <input type="text" id="uebung" name="uebung" list="uebungen-liste"
+           placeholder="Übung wählen oder neue eintippen" required autocomplete="off">
+    <datalist id="uebungen-liste">
+        {% for u in uebungen %}
+        <option value="{{ u['name'] }}">
+        {% endfor %}
+    </datalist>
+
+    <div id="letzte-leistung" class="muted letzte-leistung"></div>
+
+    <div id="saetze-liste" style="margin-top: 14px;"></div>
+
+    <button type="button" id="satz-hinzufuegen-btn" class="secondary-button">
+        + Satz hinzufügen
+    </button>
+
+    <button type="submit">Übung speichern</button>
+</form>
+
+<template id="satz-zeile-vorlage">
+    <div class="satz-zeile">
+        <div class="satz-feld">
+            <label>Gewicht (kg)</label>
+            <input type="text" inputmode="decimal" name="gewicht[]" placeholder="z.B. 120">
+        </div>
+        <div class="satz-feld">
+            <label>Wdh.</label>
+            <input type="number" name="wiederholungen[]" placeholder="z.B. 5">
+        </div>
+        <button type="button" class="satz-entfernen-btn" title="Satz entfernen">&times;</button>
+    </div>
+</template>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Vom Server mitgegeben: für jede bekannte Übung die zuletzt eingetragene
+    // Leistung, damit wir sie ohne Serveranfrage sofort anzeigen können.
+    const letzteLeistung = {{ letzte_leistung_json | safe }};
+
+    const saetzeListe = document.getElementById("saetze-liste");
+    const vorlage = document.getElementById("satz-zeile-vorlage");
+    const hinzufuegenBtn = document.getElementById("satz-hinzufuegen-btn");
+    const uebungInput = document.getElementById("uebung");
+    const letzteLeistungAnzeige = document.getElementById("letzte-leistung");
+
+    function satzZeileHinzufuegen() {
+        const neueZeile = vorlage.content.cloneNode(true);
+        neueZeile.querySelector(".satz-entfernen-btn").addEventListener("click", function (ereignis) {
+            ereignis.target.closest(".satz-zeile").remove();
+        });
+        saetzeListe.appendChild(neueZeile);
+    }
+
+    function letzteLeistungAktualisieren() {
+        const eingabe = uebungInput.value.trim();
+        const daten = letzteLeistung[eingabe];
+        if (daten) {
+            const saetzeText = daten.saetze
+                .map(function (s) { return s.gewicht + "kg×" + s.wiederholungen; })
+                .join(", ");
+            letzteLeistungAnzeige.textContent = "Letztes Mal (" + daten.datum + "): " + saetzeText;
+        } else {
+            letzteLeistungAnzeige.textContent = "";
+        }
+    }
+
+    uebungInput.addEventListener("input", letzteLeistungAktualisieren);
+    hinzufuegenBtn.addEventListener("click", satzZeileHinzufuegen);
+
+    // Mit 3 leeren Sätzen starten -- deckt den häufigsten Fall ab.
+    satzZeileHinzufuegen();
+    satzZeileHinzufuegen();
+    satzZeileHinzufuegen();
+</script>
+{% endblock %}

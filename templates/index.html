@@ -34,21 +34,22 @@
     {% else %}
         <p class="muted">Heute noch nichts eingetragen.</p>
     {% endif %}
+    <a href="{{ url_for('ernaehrung_verlauf') }}" class="link">Verlauf ansehen &rarr;</a>
 </div>
 
 <div class="card">
     <h2>Letzte Trainings</h2>
     {% if letzte_trainings %}
         <ul class="list">
-        {% for eintrag in letzte_trainings %}
+        {% for training in letzte_trainings %}
             <li>
-                <strong>{{ eintrag["uebung"] }}</strong>
-                <span class="muted">– {{ eintrag["datum"] }}</span><br>
-                {% for satz in eintrag["saetze"] %}{{ satz["gewicht"] }}kg×{{ satz["wiederholungen"] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                <a href="{{ url_for('training_session', einheit_id=training['id']) }}" class="link">
+                    {{ training["datum"] }}{% if training["uebungen"] %} – {{ training["uebungen"] | join(", ") }}{% endif %}
+                </a>
             </li>
         {% endfor %}
         </ul>
-        <a href="{{ url_for('training_verlauf') }}" class="link">Verlauf &amp; Maximalleistung &rarr;</a>
+        <a href="{{ url_for('verlauf') }}" class="link">Verlauf &amp; Maximalleistung &rarr;</a>
     {% else %}
         <p class="muted">Noch kein Training eingetragen.</p>
     {% endif %}

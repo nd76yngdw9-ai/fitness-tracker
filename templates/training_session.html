@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Training{% endblock %}
+{% block content %}
+
+<h1>Training – {{ einheit["datum"] }}</h1>
+
+{% if uebungen_gruppiert %}
+    {% for uebung, saetze in uebungen_gruppiert.items() %}
+    <div class="card">
+        <h2>{{ uebung }}</h2>
+        <ul class="list">
+            {% for satz in saetze %}
+            <li>Satz {{ satz["satznummer"] }}: {{ satz["gewicht"] }} kg × {{ satz["wiederholungen"] }}</li>
+            {% endfor %}
+        </ul>
+        <form method="post"
+              action="{{ url_for('training_uebung_loeschen', einheit_id=einheit['id'], uebung=uebung) }}"
+              onsubmit="return confirm('{{ uebung }} aus diesem Training entfernen?');">
+            <button type="submit" class="danger-link">Übung entfernen</button>
+        </form>
+    </div>
+    {% endfor %}
+{% else %}
+    <p class="muted">Noch keine Übung in diesem Training.</p>
+{% endif %}
+
+<a href="{{ url_for('training_uebung_neu', einheit_id=einheit['id']) }}" class="secondary-button add-uebung-button">
+    + Übung hinzufügen
+</a>
+
+<a href="{{ url_for('index') }}" class="link fertig-link">
+    Training abschließen &amp; zum Dashboard
+</a>
+
+<form method="post" action="{{ url_for('training_loeschen', einheit_id=einheit['id']) }}"
+      onsubmit="return confirm('Das komplette Training mit allen Übungen löschen?');">
+    <button type="submit" class="danger-link">Ganzes Training löschen</button>
+</form>
+
+{% endblock %}

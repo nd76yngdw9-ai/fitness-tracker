@@ -1,14 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Gewichtsverlauf{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 
 <h1>Gewichtsverlauf</h1>
 
 {% if eintraege %}
-<table class="table">
-    <tr><th>Datum</th><th>Gewicht</th></tr>
+<div class="card chart-card">
+    <canvas id="gewicht-chart"></canvas>
+</div>
+
+{% if projektions_text %}
+<div class="card">
+    <h2>Projektion</h2>
+    <p>
+        Bei gleichbleibendem Trend
+        ({{ "+" if projektions_text["kg_pro_woche"] >= 0 else "" }}{{ projektions_text["kg_pro_woche"] }} kg/Woche)
+        wärst du am <strong>{{ projektions_text["datum_in_3_monaten"] }}</strong>
+        bei etwa <strong>{{ projektions_text["wert_in_3_monaten"] }} kg</strong>.
+    </p>
+    <p class="muted">
+        Einfache Trendfortschreibung aus deinen bisherigen Einträgen, keine Garantie --
+        je mehr Einträge, desto verlässlicher die Schätzung.
+    </p>
+</div>
+{% endif %}
+{% endif %}
+
+{% if eintraege %}
+<table class="table" style="margin-top: 16px;">
+    <tr><th>Datum</th><th>Gewicht</th><th></th></tr>
     {% for e in eintraege %}
-    <tr><td>{{ e["datum"] }}</td><td>{{ e["wert"] }} kg</td></tr>
+    <tr>
+        <td>{{ e["datum"] }}</td>
+        <td>{{ e["wert"] }} kg</td>
+        <td>
+            <form method="post" action="{{ url_for('gewicht_loeschen', eintrag_id=e['id']) }}"
+                  onsubmit="return confirm('Eintrag löschen?');">
+                <button type="submit" class="danger-link">Löschen</button>
+            </form>
+        </td>
+    </tr>
     {% endfor %}
 </table>
 {% else %}
@@ -17,4 +53,53 @@
 
 <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
 
+{% endblock %}
+
+{% block extra_scripts %}
+{% if eintraege %}
+<script>
+    const alleLabels = {{ labels_json | safe }};
+    const gewichtWerte = {{ gewicht_werte_json | safe }};
+    const projektionWerte = {{ projektion_werte_json | safe }};
+    const zielgewicht = {{ zielgewicht }};
+
+    const datensaetze = [
+        {
+            label: "Gewicht",
+            data: gewichtWerte,
+            borderColor: "#2563eb",
+            backgroundColor: "#2563eb",
+            spanGaps: true,
+            tension: 0.2,
+        },
+        {
+            label: "Projektion (3 Monate)",
+            data: projektionWerte,
+            borderColor: "#94a3b8",
+            backgroundColor: "#94a3b8",
+            borderDash: [6, 6],
+            spanGaps: true,
+            tension: 0.2,
+        },
+        {
+            label: "Zielgewicht",
+            data: alleLabels.map(function () { return zielgewicht; }),
+            borderColor: "#16a34a",
+            backgroundColor: "#16a34a",
+            borderDash: [2, 4],
+            pointRadius: 0,
+        },
+    ];
+
+    new Chart(document.getElementById("gewicht-chart"), {
+        type: "line",
+        data: { labels: alleLabels, datasets: datensaetze },
+        options: {
+            scales: {
+                y: { title: { display: true, text: "Gewicht (kg)" } },
+            },
+        },
+    });
+</script>
+{% endif %}
 {% endblock %}

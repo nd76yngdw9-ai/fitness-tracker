@@ -30,4 +30,15 @@ nochmal etwas ein, wird der bisherige Eintrag für diesen Tag ersetzt.</p>
     <button type="submit">Speichern</button>
 </form>
 
+{% if eintrag %}
+<form method="post" action="{{ url_for('ernaehrung_loeschen', datum=eintrag['datum']) }}"
+      onsubmit="return confirm('Diesen Eintrag löschen?');" style="margin-top: 10px;">
+    <button type="submit" class="danger-link">Diesen Eintrag löschen</button>
+</form>
+{% endif %}
+
+<p class="muted" style="margin-top: 16px;">
+    <a href="{{ url_for('ernaehrung_verlauf') }}" class="link">Verlauf ansehen &rarr;</a>
+</p>
+
 {% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Verlauf{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<h1>Verlauf</h1>
+
+<h2 class="section-heading">Trainings</h2>
+{% if einheiten %}
+    <ul class="list">
+    {% for e in einheiten %}
+        <li>
+            <a href="{{ url_for('training_session', einheit_id=e['id']) }}" class="link">
+                {{ e["datum"] }}{% if e["uebungen"] %} – {{ e["uebungen"] | join(", ") }}{% endif %}
+            </a>
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p class="muted">Noch keine Trainings eingetragen.</p>
+{% endif %}
+
+<h2 class="section-heading">Übungen</h2>
+<form method="get" class="form">
+    {% for u in alle_uebungen %}
+    <label class="checkbox-label">
+        <input type="checkbox" name="uebung" value="{{ u['name'] }}"
+               {% if u['name'] in ausgewaehlte_uebungen %}checked{% endif %}>
+        {{ u["name"] }}
+    </label>
+    {% endfor %}
+    <button type="submit" style="margin-top: 14px;">Anzeigen</button>
+</form>
+
+{% if ausgewaehlte_uebungen %}
+<div class="card chart-card">
+    <canvas id="verlauf-chart"></canvas>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+{% if ausgewaehlte_uebungen %}
+<script>
+    const chartDaten = {{ chart_daten_json | safe }};
+    const farben = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#9333ea", "#0891b2"];
+
+    const datensaetze = Object.keys(chartDaten).map(function (name, index) {
+        return {
+            label: name,
+            data: chartDaten[name].map(function (punkt) {
+                return { x: punkt.datum, y: punkt.e1rm };
+            }),
+            borderColor: farben[index % farben.length],
+            backgroundColor: farben[index % farben.length],
+            tension: 0.2,
+        };
+    });
+
+    new Chart(document.getElementById("verlauf-chart"), {
+        type: "line",
+        data: { datasets: datensaetze },
+        options: {
+            scales: {
+                x: { type: "category", title: { display: true, text: "Datum" } },
+                y: { title: { display: true, text: "Berechnete Maximalleistung (kg)" } },
+            },
+        },
+    });
+</script>
+{% endif %}
+{% endblock %}
