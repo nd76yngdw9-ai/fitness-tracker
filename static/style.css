@@ -214,6 +214,11 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     border-radius: 10px;
 }
 
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .table {
     width: 100%;
     border-collapse: collapse;
