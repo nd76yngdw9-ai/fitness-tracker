@@ -18,10 +18,11 @@ Datenmodell (seit dieser Version):
   eigenem Gewicht und eigenen Wiederholungen.
 """
 
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, Response
 import sqlite3
 import os
 import json
+import hmac
 from datetime import date, datetime, timedelta
 
 app = Flask(__name__)
@@ -45,6 +46,36 @@ STANDARD_UEBUNGEN = [
     "Rudern",
     "Beinpresse",
 ]
+
+
+# Login-Schutz: NUR aktiv, wenn beide Werte gesetzt sind (praktisch fürs
+# lokale Testen ohne Login). Für den öffentlichen Zugriff von außen sollten
+# diese unbedingt gesetzt werden (siehe docker-compose.yml).
+TRACKER_BENUTZER = os.environ.get("TRACKER_BENUTZER")
+TRACKER_PASSWORT = os.environ.get("TRACKER_PASSWORT")
+
+
+@app.before_request
+def zugang_pruefen():
+    """Läuft vor JEDER Anfrage. Fragt einen klassischen Browser-Login-Dialog
+    ab (HTTP Basic Auth), wenn Benutzername/Passwort konfiguriert sind.
+    hmac.compare_digest statt == vergleicht die Zeichenketten so, dass die
+    Vergleichszeit nicht verrät, wie viele Zeichen schon richtig waren
+    (schützt vor sogenannten Timing-Angriffen)."""
+    if not TRACKER_BENUTZER or not TRACKER_PASSWORT:
+        return  # kein Login konfiguriert -> kein Schutz aktiv
+
+    auth = request.authorization
+    angemeldet = (
+        auth
+        and hmac.compare_digest(auth.username or "", TRACKER_BENUTZER)
+        and hmac.compare_digest(auth.password or "", TRACKER_PASSWORT)
+    )
+    if not angemeldet:
+        return Response(
+            "Anmeldung erforderlich", 401,
+            {"WWW-Authenticate": 'Basic realm="Tracker"'},
+        )
 
 
 def get_db():
@@ -687,7 +718,14 @@ def verlauf():
     )
 
 
+# WICHTIG: init_db() läuft hier auf Modul-Ebene (nicht nur im
+# if __name__ == "__main__"-Block), damit die Datenbank auch dann
+# eingerichtet wird, wenn die App nicht direkt gestartet, sondern von einem
+# WSGI-Server importiert wird (so funktioniert Hosting z.B. auf
+# PythonAnywhere -- dort wird "app" importiert, nicht "python app.py" ausgeführt).
+init_db()
+
 if __name__ == "__main__":
-    init_db()
     # host="0.0.0.0" macht die Seite im ganzen WLAN erreichbar (fürs Handy nötig)
+    # Nur für lokales Testen -- auf PythonAnywhere übernimmt deren WSGI-Server das.
     app.run(host="0.0.0.0", port=5000, debug=True)
