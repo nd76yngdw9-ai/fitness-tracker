@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Gewichtsverlauf{% endblock %}
+{% block content %}
+
+<h1>Gewichtsverlauf</h1>
+
+{% if eintraege %}
+<table class="table">
+    <tr><th>Datum</th><th>Gewicht</th></tr>
+    {% for e in eintraege %}
+    <tr><td>{{ e["datum"] }}</td><td>{{ e["wert"] }} kg</td></tr>
+    {% endfor %}
+</table>
+{% else %}
+<p class="muted">Noch keine Einträge.</p>
+{% endif %}
+
+<a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
+
+{% endblock %}

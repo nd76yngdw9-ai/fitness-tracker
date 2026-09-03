@@ -1,0 +1,36 @@
+# Zwei komplett getrennte Instanzen derselben App:
+# - "tracker-benedikt" auf Port 5000, eigene Datenbank, deine Ziele
+# - "tracker-freund" auf Port 5001, eigene Datenbank, eigene Ziele
+#
+# Beide werden aus demselben Code gebaut (build: .), laufen aber als
+# unabhängige Container mit eigenem Volume -- die Daten vermischen sich nie.
+
+services:
+  tracker-benedikt:
+    build: .
+    container_name: fitness-tracker-benedikt
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      ZIELGEWICHT_KG: "100"
+      KALORIENZIEL: "3600"
+    volumes:
+      - tracker-data-benedikt:/data
+
+  tracker-freund:
+    build: .
+    container_name: fitness-tracker-freund
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      # Hier die Werte deines Freundes eintragen, bevor du deployst:
+      ZIELGEWICHT_KG: "80"
+      KALORIENZIEL: "2800"
+    volumes:
+      - tracker-data-freund:/data
+
+volumes:
+  tracker-data-benedikt:
+  tracker-data-freund:

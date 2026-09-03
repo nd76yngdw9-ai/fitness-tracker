@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <!-- Diese Zeile sorgt dafür, dass die Seite auf dem Handy nicht winzig aussieht -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <nav class="bottom-nav">
+        <a href="{{ url_for('index') }}" class="nav-item">🏠<span>Start</span></a>
+        <a href="{{ url_for('gewicht') }}" class="nav-item">⚖️<span>Gewicht</span></a>
+        <a href="{{ url_for('ernaehrung') }}" class="nav-item">🍽️<span>Essen</span></a>
+        <a href="{{ url_for('training') }}" class="nav-item">💪<span>Training</span></a>
+    </nav>
+</body>
+</html>
