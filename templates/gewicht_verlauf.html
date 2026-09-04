@@ -23,10 +23,12 @@
         wärst du am <strong>{{ projektions_text["datum_in_3_monaten"] }}</strong>
         bei etwa <strong>{{ projektions_text["wert_in_3_monaten"] }} kg</strong>.
     </p>
-    <p class="muted">
-        Einfache Trendfortschreibung aus deinen bisherigen Einträgen, keine Garantie --
-        je mehr Einträge, desto verlässlicher die Schätzung.
+    {% if projektions_text["ziel_datum"] %}
+    <p>
+        Dein Zielgewicht von <strong>{{ zielgewicht }} kg</strong> wäre bei diesem Trend
+        voraussichtlich am <strong>{{ projektions_text["ziel_datum"] }}</strong> erreicht.
     </p>
+    {% endif %}
 </div>
 {% endif %}
 {% endif %}

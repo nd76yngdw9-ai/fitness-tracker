@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrieren</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="content auth-content">
+        <h1>Konto erstellen</h1>
+
+        {% if fehler %}
+        <p class="fehlertext">{{ fehler }}</p>
+        {% endif %}
+
+        <form method="post" class="form">
+            <label for="benutzername">Benutzername</label>
+            <input type="text" id="benutzername" name="benutzername" required autofocus>
+
+            <label for="passwort">Passwort</label>
+            <input type="password" id="passwort" name="passwort" required>
+
+            <label for="passwort_wiederholung">Passwort wiederholen</label>
+            <input type="password" id="passwort_wiederholung" name="passwort_wiederholung" required>
+
+            {% if braucht_code %}
+            <label for="registrierungs_code">Registrierungscode</label>
+            <input type="text" id="registrierungs_code" name="registrierungs_code" required>
+            {% endif %}
+
+            <button type="submit">Konto erstellen</button>
+        </form>
+
+        <p class="muted" style="margin-top: 16px;">
+            Schon ein Konto? <a href="{{ url_for('login') }}" class="link">Anmelden</a>
+        </p>
+    </main>
+</body>
+</html>

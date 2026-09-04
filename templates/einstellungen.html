@@ -3,8 +3,14 @@
 {% block content %}
 
 <h1>Einstellungen</h1>
+<p class="muted">Angemeldet als {{ benutzername }}</p>
 
 <form method="post" class="form">
+    <label for="startgewicht">Startgewicht (kg, optional)</label>
+    <input type="text" inputmode="decimal" id="startgewicht" name="startgewicht"
+           value="{{ werte['startgewicht'] if werte['startgewicht'] is not none else '' }}"
+           placeholder="wird sonst automatisch dein erster Eintrag">
+
     <label for="zielgewicht">Zielgewicht (kg)</label>
     <input type="text" inputmode="decimal" id="zielgewicht" name="zielgewicht"
            value="{{ werte['zielgewicht'] }}" required>
@@ -19,5 +25,9 @@
 <p class="muted" style="margin-top: 16px;">
     <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
 </p>
+
+<form method="post" action="{{ url_for('logout') }}" style="margin-top: 20px;">
+    <button type="submit" class="danger-link">Abmelden</button>
+</form>
 
 {% endblock %}

@@ -10,33 +10,50 @@ Grundkonzepte, die hier vorkommen (zum Nachschlagen):
 - GET vs. POST:      GET = Seite anzeigen, POST = Formular absenden
 - SQLite:            eine Datenbank, die einfach eine einzelne Datei ist (tracker.db)
 - render_template:   füllt eine HTML-Datei aus templates/ mit Daten
+- Session:           ein Cookie im Browser, das (verschlüsselt) merkt, wer
+                      eingeloggt ist -- dafür braucht Flask einen "secret_key"
 
-Datenmodell (seit dieser Version):
+Datenmodell:
+- Ein BENUTZER hat einen Benutzernamen + ein gehashtes Passwort. JEDE andere
+  Tabelle ist über eine benutzer_id an genau einen Benutzer gebunden --
+  so sehen zwei Personen, die dieselbe App nutzen, nur ihre eigenen Daten.
 - Ein TRAINING ("trainingseinheit") ist ein Container für einen Tag/Zeitpunkt.
 - In einem Training stecken beliebig viele ÜBUNGEN.
 - Jede Übung hat beliebig viele SÄTZE ("trainingssatz"), jeder Satz mit
   eigenem Gewicht und eigenen Wiederholungen.
 """
 
-from flask import Flask, render_template, request, redirect, url_for, Response
+from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
 import os
 import json
-import hmac
 from datetime import date, datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-# Standardmäßig lokal "tracker.db", in Docker per Umgebungsvariable auf ein
-# persistentes Volume umgebogen (siehe Dockerfile/docker-compose.yml)
+# Für Sessions (Login-Cookies) zwingend nötig. Für den echten Betrieb per
+# Umgebungsvariable SECRET_KEY setzen (siehe WSGI-Anleitung in der README) --
+# sonst werden bei jedem Neustart der App alle Logins ungültig.
+app.secret_key = os.environ.get("SECRET_KEY", "nur-fuer-lokales-testen-aendere-mich")
+
+# Ohne diese Einstellung wäre der Login-Cookie ein "Session-Cookie", das der
+# Browser beim Schließen verwirft -- bei "Zum Home-Bildschirm hinzufügen"
+# auf dem iPhone gilt jedes Öffnen der App als komplett neue Sitzung, man
+# müsste sich also jedes Mal neu anmelden. permanent_session_lifetime macht
+# aus dem Cookie stattdessen ein "dauerhaftes" Cookie mit Ablaufdatum (hier:
+# 1 Jahr), das über App-Neustarts hinweg erhalten bleibt.
+app.permanent_session_lifetime = timedelta(days=365)
+
+# Standardmäßig lokal "tracker.db", per Umgebungsvariable auf einen anderen
+# Pfad umbiegbar (z.B. für Docker-Volumes).
 DB_PFAD = os.environ.get("DB_PFAD", "tracker.db")
 
-# Nur noch der STARTWERT für eine frische Installation. Geändert werden
-# Zielgewicht und Kalorienziel danach direkt in der App unter "Einstellungen".
-ZIELGEWICHT_STANDARD = float(os.environ.get("ZIELGEWICHT_KG", 100.0))
-KALORIENZIEL_STANDARD = int(os.environ.get("KALORIENZIEL", 3600))
+# Startwerte für neu registrierte Benutzer (danach individuell unter
+# "Einstellungen" änderbar).
+ZIELGEWICHT_STANDARD = float(os.environ.get("ZIELGEWICHT_KG", 80.0))
+KALORIENZIEL_STANDARD = int(os.environ.get("KALORIENZIEL", 2500))
 
-# Übungen, mit denen die Vorauswahl beim ersten Start gefüllt wird. Jede neu
-# eingetragene Übung wird danach automatisch mit aufgenommen.
+# Übungen, mit denen die Vorauswahl eines NEUEN Benutzers gefüllt wird.
 STANDARD_UEBUNGEN = [
     "Bankdrücken",
     "Kniebeuge",
@@ -47,35 +64,16 @@ STANDARD_UEBUNGEN = [
     "Beinpresse",
 ]
 
+# Optional: wenn gesetzt, muss man bei der Registrierung diesen Code
+# eingeben (schützt davor, dass Fremde sich auf deiner öffentlichen App
+# einfach so ein Konto anlegen). Wenn nicht gesetzt, ist die Registrierung
+# offen für alle mit dem Link.
+REGISTRIERUNGS_CODE = os.environ.get("REGISTRIERUNGS_CODE")
 
-# Login-Schutz: NUR aktiv, wenn beide Werte gesetzt sind (praktisch fürs
-# lokale Testen ohne Login). Für den öffentlichen Zugriff von außen sollten
-# diese unbedingt gesetzt werden (siehe docker-compose.yml).
-TRACKER_BENUTZER = os.environ.get("TRACKER_BENUTZER")
-TRACKER_PASSWORT = os.environ.get("TRACKER_PASSWORT")
-
-
-@app.before_request
-def zugang_pruefen():
-    """Läuft vor JEDER Anfrage. Fragt einen klassischen Browser-Login-Dialog
-    ab (HTTP Basic Auth), wenn Benutzername/Passwort konfiguriert sind.
-    hmac.compare_digest statt == vergleicht die Zeichenketten so, dass die
-    Vergleichszeit nicht verrät, wie viele Zeichen schon richtig waren
-    (schützt vor sogenannten Timing-Angriffen)."""
-    if not TRACKER_BENUTZER or not TRACKER_PASSWORT:
-        return  # kein Login konfiguriert -> kein Schutz aktiv
-
-    auth = request.authorization
-    angemeldet = (
-        auth
-        and hmac.compare_digest(auth.username or "", TRACKER_BENUTZER)
-        and hmac.compare_digest(auth.password or "", TRACKER_PASSWORT)
-    )
-    if not angemeldet:
-        return Response(
-            "Anmeldung erforderlich", 401,
-            {"WWW-Authenticate": 'Basic realm="Tracker"'},
-        )
+# Seiten, die OHNE Login erreichbar sein müssen (sonst gäbe es eine
+# Endlos-Weiterleitung: nicht eingeloggt -> zu /login geschickt -> /login
+# selbst verlangt auch einen Login -> ...).
+OEFFENTLICHE_ENDPUNKTE = {"login", "registrieren", "static"}
 
 
 def get_db():
@@ -83,6 +81,22 @@ def get_db():
     conn = sqlite3.connect(DB_PFAD)
     conn.row_factory = sqlite3.Row  # erlaubt Zugriff wie zeile["spalte"]
     return conn
+
+
+@app.before_request
+def login_erforderlich():
+    """Läuft vor JEDER Anfrage. Ohne aktive Session (= nicht eingeloggt)
+    geht's nur zu den öffentlichen Endpunkten (Login/Registrierung/
+    Static-Dateien wie CSS) -- alles andere leitet zum Login um."""
+    if request.endpoint in OEFFENTLICHE_ENDPUNKTE or request.endpoint is None:
+        return
+    if "benutzer_id" not in session:
+        return redirect(url_for("login"))
+
+
+def aktueller_benutzer_id():
+    """Kurzform für die ID des gerade eingeloggten Benutzers."""
+    return session["benutzer_id"]
 
 
 def berechne_e1rm(gewicht, wiederholungen):
@@ -124,83 +138,135 @@ def berechne_gewichtstrend(eintraege_aufsteigend):
 
 def init_db():
     """Legt alle Tabellen an, falls sie noch nicht existieren, und migriert
-    Daten aus älteren Versionen dieser App. Wird bei jedem Start aufgerufen
-    -- schadet nicht, wenn schon alles vorhanden ist (IF NOT EXISTS)."""
+    Daten aus älteren (Einzelbenutzer-)Versionen dieser App. Wird beim
+    Start des Moduls aufgerufen -- schadet nicht, wenn schon alles
+    vorhanden ist.
+
+    Migrations-Prinzip für bestehende Installationen: alle Zeilen aus der
+    alten, benutzerlosen Version werden dem Benutzer mit id=1 zugeordnet.
+    Da SQLite AUTOINCREMENT beim allerersten angelegten Benutzer automatisch
+    die id 1 vergibt, landet die alte Historie automatisch beim ersten
+    Benutzer, der sich neu registriert."""
     conn = get_db()
 
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS gewicht (
+        CREATE TABLE IF NOT EXISTS benutzer (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            datum TEXT NOT NULL,
-            wert REAL NOT NULL
+            benutzername TEXT NOT NULL UNIQUE,
+            passwort_hash TEXT NOT NULL
         )
     """)
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS ernaehrung (
-            datum TEXT PRIMARY KEY,
-            kalorien INTEGER NOT NULL,
-            protein REAL,
-            fett REAL,
-            kohlenhydrate REAL
-        )
-    """)
+    # --- gewicht: einfache Spalte ergänzen, falls noch nicht vorhanden ---
+    _tabelle_um_benutzer_id_ergaenzen(
+        conn, "gewicht",
+        "CREATE TABLE gewicht (id INTEGER PRIMARY KEY AUTOINCREMENT, benutzer_id INTEGER NOT NULL, datum TEXT NOT NULL, wert REAL NOT NULL)"
+    )
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS einstellungen (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            zielgewicht REAL NOT NULL,
-            kalorienziel INTEGER NOT NULL
-        )
-    """)
-    vorhandene_einstellungen = conn.execute(
-        "SELECT COUNT(*) AS anzahl FROM einstellungen"
-    ).fetchone()["anzahl"]
-    if vorhandene_einstellungen == 0:
-        conn.execute(
-            "INSERT INTO einstellungen (id, zielgewicht, kalorienziel) VALUES (1, ?, ?)",
-            (ZIELGEWICHT_STANDARD, KALORIENZIEL_STANDARD),
-        )
+    # --- trainingseinheit: einfache Spalte ergänzen ---
+    _tabelle_um_benutzer_id_ergaenzen(
+        conn, "trainingseinheit",
+        "CREATE TABLE trainingseinheit (id INTEGER PRIMARY KEY AUTOINCREMENT, benutzer_id INTEGER NOT NULL, datum TEXT NOT NULL, erstellt_um TEXT NOT NULL)"
+    )
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS uebungen (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
-        )
-    """)
-    vorhandene_uebungen = conn.execute(
-        "SELECT COUNT(*) AS anzahl FROM uebungen"
-    ).fetchone()["anzahl"]
-    if vorhandene_uebungen == 0:
-        conn.executemany(
-            "INSERT OR IGNORE INTO uebungen (name) VALUES (?)",
-            [(name,) for name in STANDARD_UEBUNGEN],
-        )
-
-    # Ein Training ist der Container für einen Trainingstermin (man kann
-    # theoretisch mehrere pro Tag haben -- erstellt_um unterscheidet sie).
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS trainingseinheit (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            datum TEXT NOT NULL,
-            erstellt_um TEXT NOT NULL
-        )
-    """)
-
-    # Migration: falls "trainingssatz" noch die ALTE Struktur hat (mit einer
-    # "datum"-Spalte direkt am Satz, ohne Training-Container), wird sie
-    # umbenannt, und wir bauen unten die neue Struktur + Migration.
-    alte_struktur = False
-    tabelle_vorhanden = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='trainingssatz'"
+    # --- ernaehrung: braucht einen zusammengesetzten Primärschlüssel
+    #     (benutzer_id, datum) statt nur datum -> komplett neu aufbauen ---
+    ernaehrung_existiert = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='ernaehrung'"
     ).fetchone()
-    if tabelle_vorhanden:
-        spalten = [row["name"] for row in conn.execute("PRAGMA table_info(trainingssatz)")]
-        if "datum" in spalten:
-            alte_struktur = True
-            conn.execute("ALTER TABLE trainingssatz RENAME TO trainingssatz_alt")
+    if ernaehrung_existiert:
+        spalten = [r["name"] for r in conn.execute("PRAGMA table_info(ernaehrung)")]
+        if "benutzer_id" not in spalten:
+            conn.execute("ALTER TABLE ernaehrung RENAME TO ernaehrung_alt")
+            conn.execute("""
+                CREATE TABLE ernaehrung (
+                    benutzer_id INTEGER NOT NULL,
+                    datum TEXT NOT NULL,
+                    kalorien INTEGER NOT NULL,
+                    protein REAL, fett REAL, kohlenhydrate REAL,
+                    PRIMARY KEY (benutzer_id, datum)
+                )
+            """)
+            conn.execute("""
+                INSERT INTO ernaehrung (benutzer_id, datum, kalorien, protein, fett, kohlenhydrate)
+                SELECT 1, datum, kalorien, protein, fett, kohlenhydrate FROM ernaehrung_alt
+            """)
+            conn.execute("DROP TABLE ernaehrung_alt")
+    else:
+        conn.execute("""
+            CREATE TABLE ernaehrung (
+                benutzer_id INTEGER NOT NULL,
+                datum TEXT NOT NULL,
+                kalorien INTEGER NOT NULL,
+                protein REAL, fett REAL, kohlenhydrate REAL,
+                PRIMARY KEY (benutzer_id, datum)
+            )
+        """)
 
-    # Jede Zeile ist EIN Satz einer Übung, verknüpft mit seinem Training.
+    # --- einstellungen: benutzer_id als Primärschlüssel statt fixer id=1,
+    #     PLUS neue Spalte "startgewicht" -> komplett neu aufbauen ---
+    einstellungen_existiert = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='einstellungen'"
+    ).fetchone()
+    if einstellungen_existiert:
+        spalten = [r["name"] for r in conn.execute("PRAGMA table_info(einstellungen)")]
+        if "benutzer_id" not in spalten:
+            conn.execute("ALTER TABLE einstellungen RENAME TO einstellungen_alt")
+            conn.execute("""
+                CREATE TABLE einstellungen (
+                    benutzer_id INTEGER PRIMARY KEY,
+                    startgewicht REAL,
+                    zielgewicht REAL NOT NULL,
+                    kalorienziel INTEGER NOT NULL
+                )
+            """)
+            alte_zeile = conn.execute("SELECT * FROM einstellungen_alt WHERE id = 1").fetchone()
+            if alte_zeile:
+                conn.execute(
+                    "INSERT INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel) VALUES (1, NULL, ?, ?)",
+                    (alte_zeile["zielgewicht"], alte_zeile["kalorienziel"]),
+                )
+            conn.execute("DROP TABLE einstellungen_alt")
+    else:
+        conn.execute("""
+            CREATE TABLE einstellungen (
+                benutzer_id INTEGER PRIMARY KEY,
+                startgewicht REAL,
+                zielgewicht REAL NOT NULL,
+                kalorienziel INTEGER NOT NULL
+            )
+        """)
+
+    # --- uebungen: UNIQUE muss (benutzer_id, name) statt nur name sein ---
+    uebungen_existiert = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='uebungen'"
+    ).fetchone()
+    if uebungen_existiert:
+        spalten = [r["name"] for r in conn.execute("PRAGMA table_info(uebungen)")]
+        if "benutzer_id" not in spalten:
+            conn.execute("ALTER TABLE uebungen RENAME TO uebungen_alt")
+            conn.execute("""
+                CREATE TABLE uebungen (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    benutzer_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    UNIQUE(benutzer_id, name)
+                )
+            """)
+            conn.execute("INSERT INTO uebungen (benutzer_id, name) SELECT 1, name FROM uebungen_alt")
+            conn.execute("DROP TABLE uebungen_alt")
+    else:
+        conn.execute("""
+            CREATE TABLE uebungen (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                benutzer_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                UNIQUE(benutzer_id, name)
+            )
+        """)
+
+    # --- trainingssatz: unverändert (hängt über trainingseinheit_id am
+    #     Training, das seinerseits schon eine benutzer_id hat) ---
     conn.execute("""
         CREATE TABLE IF NOT EXISTS trainingssatz (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -212,53 +278,44 @@ def init_db():
         )
     """)
 
-    if alte_struktur:
-        # Annahme für die Migration: alle Sätze desselben alten Datums
-        # gehören zu EINEM Training (die alte Version kannte noch keine
-        # mehreren Trainings pro Tag).
-        alte_saetze = conn.execute(
-            "SELECT * FROM trainingssatz_alt ORDER BY datum, id"
-        ).fetchall()
-        einheit_je_datum = {}
-        for satz in alte_saetze:
-            datum = satz["datum"]
-            if datum not in einheit_je_datum:
-                cursor = conn.execute(
-                    "INSERT INTO trainingseinheit (datum, erstellt_um) VALUES (?, ?)",
-                    (datum, datum + "T00:00:00"),
-                )
-                einheit_je_datum[datum] = cursor.lastrowid
-            conn.execute(
-                """INSERT INTO trainingssatz
-                   (trainingseinheit_id, uebung, gewicht, wiederholungen, satznummer)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (
-                    einheit_je_datum[datum],
-                    satz["uebung"],
-                    satz["gewicht"],
-                    satz["wiederholungen"],
-                    satz["satznummer"],
-                ),
-            )
-        conn.execute("DROP TABLE trainingssatz_alt")
-
     conn.commit()
     conn.close()
 
 
-def get_einstellungen(conn):
-    """Liest die aktuelle Zielgewicht/Kalorienziel-Zeile aus der Datenbank."""
-    return conn.execute("SELECT * FROM einstellungen WHERE id = 1").fetchone()
+def _tabelle_um_benutzer_id_ergaenzen(conn, tabellenname, erstellungs_sql):
+    """Hilfsfunktion für die Migration: legt die Tabelle frisch mit der
+    finalen Struktur an, falls sie noch nicht existiert -- oder ergänzt bei
+    einer bestehenden alten Tabelle die Spalte benutzer_id (Standardwert 1,
+    damit alte Zeilen automatisch dem ersten Benutzer zugeordnet werden)."""
+    vorhanden = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (tabellenname,)
+    ).fetchone()
+    if not vorhanden:
+        conn.execute(erstellungs_sql)
+        return
+    spalten = [r["name"] for r in conn.execute(f"PRAGMA table_info({tabellenname})")]
+    if "benutzer_id" not in spalten:
+        conn.execute(f"ALTER TABLE {tabellenname} ADD COLUMN benutzer_id INTEGER NOT NULL DEFAULT 1")
 
 
-def hole_letzte_leistung(conn):
+def get_einstellungen(conn, benutzer_id):
+    """Liest Startgewicht/Zielgewicht/Kalorienziel des angegebenen Benutzers."""
+    return conn.execute(
+        "SELECT * FROM einstellungen WHERE benutzer_id = ?", (benutzer_id,)
+    ).fetchone()
+
+
+def hole_letzte_leistung(conn, benutzer_id):
     """Baut ein Dictionary {Übungsname: {datum, saetze}} mit der jeweils
-    letzten (jüngsten) Trainingseinheit, in der diese Übung vorkam. Wird als
-    JSON in die Seite eingebettet, damit JavaScript beim Tippen sofort die
-    letzte Leistung anzeigen kann, ohne extra beim Server nachzufragen."""
-    uebungsnamen = conn.execute(
-        "SELECT DISTINCT uebung FROM trainingssatz"
-    ).fetchall()
+    letzten (jüngsten) Trainingseinheit DIESES Benutzers, in der die Übung
+    vorkam. Wird als JSON in die Seite eingebettet, damit JavaScript beim
+    Tippen sofort die letzte Leistung anzeigen kann."""
+    uebungsnamen = conn.execute("""
+        SELECT DISTINCT ts.uebung
+        FROM trainingssatz ts
+        JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
+        WHERE te.benutzer_id = ?
+    """, (benutzer_id,)).fetchall()
 
     ergebnis = {}
     for zeile in uebungsnamen:
@@ -267,10 +324,10 @@ def hole_letzte_leistung(conn):
             SELECT te.id, te.datum
             FROM trainingseinheit te
             JOIN trainingssatz ts ON ts.trainingseinheit_id = te.id
-            WHERE ts.uebung = ?
+            WHERE ts.uebung = ? AND te.benutzer_id = ?
             ORDER BY te.erstellt_um DESC
             LIMIT 1
-        """, (name,)).fetchone()
+        """, (name, benutzer_id)).fetchone()
 
         if letzte_einheit:
             saetze = conn.execute(
@@ -289,25 +346,120 @@ def hole_letzte_leistung(conn):
     return ergebnis
 
 
+# ---------------------------------------------------------------------
+# Login / Registrierung / Logout
+# ---------------------------------------------------------------------
+
+@app.route("/registrieren", methods=["GET", "POST"])
+def registrieren():
+    if request.method == "POST":
+        benutzername = request.form["benutzername"].strip()
+        passwort = request.form["passwort"]
+        passwort_wiederholung = request.form["passwort_wiederholung"]
+        eingegebener_code = request.form.get("registrierungs_code", "")
+
+        fehler = None
+        if REGISTRIERUNGS_CODE and eingegebener_code != REGISTRIERUNGS_CODE:
+            fehler = "Registrierungscode ist falsch."
+        elif not benutzername or not passwort:
+            fehler = "Benutzername und Passwort dürfen nicht leer sein."
+        elif passwort != passwort_wiederholung:
+            fehler = "Die Passwörter stimmen nicht überein."
+
+        conn = get_db()
+        if fehler is None:
+            existiert_schon = conn.execute(
+                "SELECT id FROM benutzer WHERE benutzername = ?", (benutzername,)
+            ).fetchone()
+            if existiert_schon:
+                fehler = "Dieser Benutzername ist schon vergeben."
+
+        if fehler:
+            conn.close()
+            return render_template(
+                "registrieren.html", fehler=fehler, braucht_code=bool(REGISTRIERUNGS_CODE)
+            )
+
+        cursor = conn.execute(
+            "INSERT INTO benutzer (benutzername, passwort_hash) VALUES (?, ?)",
+            (benutzername, generate_password_hash(passwort)),
+        )
+        neue_benutzer_id = cursor.lastrowid
+
+        conn.execute(
+            "INSERT OR IGNORE INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel) VALUES (?, NULL, ?, ?)",
+            (neue_benutzer_id, ZIELGEWICHT_STANDARD, KALORIENZIEL_STANDARD),
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO uebungen (benutzer_id, name) VALUES (?, ?)",
+            [(neue_benutzer_id, name) for name in STANDARD_UEBUNGEN],
+        )
+        conn.commit()
+        conn.close()
+
+        session.permanent = True
+        session["benutzer_id"] = neue_benutzer_id
+        session["benutzername"] = benutzername
+        return redirect(url_for("index"))
+
+    return render_template("registrieren.html", fehler=None, braucht_code=bool(REGISTRIERUNGS_CODE))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        benutzername = request.form["benutzername"].strip()
+        passwort = request.form["passwort"]
+
+        conn = get_db()
+        zeile = conn.execute(
+            "SELECT * FROM benutzer WHERE benutzername = ?", (benutzername,)
+        ).fetchone()
+        conn.close()
+
+        if zeile and check_password_hash(zeile["passwort_hash"], passwort):
+            session.permanent = True
+            session["benutzer_id"] = zeile["id"]
+            session["benutzername"] = zeile["benutzername"]
+            return redirect(url_for("index"))
+
+        return render_template("login.html", fehler="Benutzername oder Passwort ist falsch.")
+
+    return render_template("login.html", fehler=None)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+# ---------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------
+
 @app.route("/")
 def index():
     """Dashboard: letztes Gewicht, Fortschritt zum Ziel, Ernährung heute,
-    letzte Trainings."""
+    letzte Trainings -- alles nur für den eingeloggten Benutzer."""
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
 
-    einstellungen = get_einstellungen(conn)
+    einstellungen = get_einstellungen(conn, benutzer_id)
 
     letztes_gewicht = conn.execute(
-        "SELECT * FROM gewicht ORDER BY datum DESC, id DESC LIMIT 1"
+        "SELECT * FROM gewicht WHERE benutzer_id = ? ORDER BY datum DESC, id DESC LIMIT 1",
+        (benutzer_id,),
     ).fetchone()
 
     heute = date.today().isoformat()
     ernaehrung_heute = conn.execute(
-        "SELECT * FROM ernaehrung WHERE datum = ?", (heute,)
+        "SELECT * FROM ernaehrung WHERE benutzer_id = ? AND datum = ?", (benutzer_id, heute)
     ).fetchone()
 
     letzte_einheiten = conn.execute(
-        "SELECT * FROM trainingseinheit ORDER BY erstellt_um DESC LIMIT 4"
+        "SELECT * FROM trainingseinheit WHERE benutzer_id = ? ORDER BY erstellt_um DESC LIMIT 4",
+        (benutzer_id,),
     ).fetchall()
     letzte_trainings = []
     for einheit in letzte_einheiten:
@@ -321,16 +473,33 @@ def index():
             "uebungen": [u["uebung"] for u in uebungen_namen],
         })
 
+    # Startgewicht für die Fortschrittsanzeige: entweder das explizit in den
+    # Einstellungen gesetzte, oder ersatzweise der allererste Gewichtseintrag.
+    effektives_startgewicht = einstellungen["startgewicht"]
+    if effektives_startgewicht is None:
+        erster_eintrag = conn.execute(
+            "SELECT wert FROM gewicht WHERE benutzer_id = ? ORDER BY datum ASC, id ASC LIMIT 1",
+            (benutzer_id,),
+        ).fetchone()
+        if erster_eintrag:
+            effektives_startgewicht = erster_eintrag["wert"]
+
     conn.close()
 
+    # Fortschritt = Anteil der Strecke vom Start- zum Zielgewicht, die schon
+    # zurückgelegt ist. Funktioniert für Zunehmen UND Abnehmen: bei einem
+    # Ziel UNTER dem Start ist (ziel - start) negativ, und ein sinkendes
+    # aktuelles Gewicht ergibt trotzdem einen positiven, wachsenden Anteil.
     fortschritt_prozent = None
-    if letztes_gewicht:
-        fortschritt_prozent = round(
-            min(100, max(0, (letztes_gewicht["wert"] / einstellungen["zielgewicht"]) * 100)), 1
+    if letztes_gewicht and effektives_startgewicht is not None and effektives_startgewicht != einstellungen["zielgewicht"]:
+        anteil = (letztes_gewicht["wert"] - effektives_startgewicht) / (
+            einstellungen["zielgewicht"] - effektives_startgewicht
         )
+        fortschritt_prozent = round(min(100, max(0, anteil * 100)), 1)
 
     return render_template(
         "index.html",
+        benutzername=session.get("benutzername"),
         letztes_gewicht=letztes_gewicht,
         zielgewicht=einstellungen["zielgewicht"],
         fortschritt_prozent=fortschritt_prozent,
@@ -342,24 +511,36 @@ def index():
 
 @app.route("/einstellungen", methods=["GET", "POST"])
 def einstellungen():
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
 
     if request.method == "POST":
+        startgewicht_roh = request.form.get("startgewicht", "").strip()
         conn.execute(
-            "UPDATE einstellungen SET zielgewicht = ?, kalorienziel = ? WHERE id = 1",
+            """UPDATE einstellungen
+               SET startgewicht = ?, zielgewicht = ?, kalorienziel = ?
+               WHERE benutzer_id = ?""",
             (
+                float(startgewicht_roh.replace(",", ".")) if startgewicht_roh else None,
                 float(request.form["zielgewicht"].replace(",", ".")),
                 int(request.form["kalorienziel"]),
+                benutzer_id,
             ),
         )
         conn.commit()
         conn.close()
         return redirect(url_for("index"))
 
-    aktuelle_werte = get_einstellungen(conn)
+    aktuelle_werte = get_einstellungen(conn, benutzer_id)
     conn.close()
-    return render_template("einstellungen.html", werte=aktuelle_werte)
+    return render_template(
+        "einstellungen.html", werte=aktuelle_werte, benutzername=session.get("benutzername")
+    )
 
+
+# ---------------------------------------------------------------------
+# Gewicht
+# ---------------------------------------------------------------------
 
 @app.route("/gewicht", methods=["GET", "POST"])
 def gewicht():
@@ -367,8 +548,8 @@ def gewicht():
         wert = float(request.form["wert"].replace(",", "."))
         conn = get_db()
         conn.execute(
-            "INSERT INTO gewicht (datum, wert) VALUES (?, ?)",
-            (request.form["datum"], wert),
+            "INSERT INTO gewicht (benutzer_id, datum, wert) VALUES (?, ?, ?)",
+            (aktueller_benutzer_id(), request.form["datum"], wert),
         )
         conn.commit()
         conn.close()
@@ -379,14 +560,15 @@ def gewicht():
 
 @app.route("/gewicht/verlauf")
 def gewicht_verlauf():
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
     eintraege = conn.execute(
-        "SELECT * FROM gewicht ORDER BY datum DESC, id DESC"
+        "SELECT * FROM gewicht WHERE benutzer_id = ? ORDER BY datum DESC, id DESC", (benutzer_id,)
     ).fetchall()
     eintraege_aufsteigend = conn.execute(
-        "SELECT * FROM gewicht ORDER BY datum ASC, id ASC"
+        "SELECT * FROM gewicht WHERE benutzer_id = ? ORDER BY datum ASC, id ASC", (benutzer_id,)
     ).fetchall()
-    einstellungen_zeile = get_einstellungen(conn)
+    einstellungen_zeile = get_einstellungen(conn, benutzer_id)
     conn.close()
 
     labels_menge = {e["datum"] for e in eintraege_aufsteigend}
@@ -400,9 +582,6 @@ def gewicht_verlauf():
         letztes_datum = date.fromisoformat(letzter_eintrag["datum"])
         letzter_ordinal = letztes_datum.toordinal()
 
-        # Beim letzten ECHTEN Wert anfangen, damit die gestrichelte
-        # Projektionslinie im Diagramm nahtlos an die durchgezogene Linie
-        # anschließt. Danach alle 7 Tage einen Punkt, 3 Monate (~90 Tage) voraus.
         projektion_je_datum[letzter_eintrag["datum"]] = letzter_eintrag["wert"]
         for tage in range(7, 91, 7):
             zukunfts_datum = (letztes_datum + timedelta(days=tage)).isoformat()
@@ -412,17 +591,27 @@ def gewicht_verlauf():
 
         labels_menge.update(projektion_je_datum.keys())
 
+        zielgewicht = einstellungen_zeile["zielgewicht"]
+
+        # Zieldatum: an welchem Tag schneidet die Trendlinie das Zielgewicht?
+        # Nur sinnvoll, wenn das rechnerisch in der ZUKUNFT liegt (nicht
+        # bereits in der Vergangenheit) -- sonst wird kein Datum angezeigt.
+        ziel_datum = None
+        if steigung != 0:
+            ziel_ordinal = round((zielgewicht - achsenabschnitt) / steigung)
+            if ziel_ordinal > letzter_ordinal:
+                ziel_datum = date.fromordinal(ziel_ordinal).isoformat()
+
         projektions_text = {
             "kg_pro_woche": round(steigung * 7, 2),
             "wert_in_3_monaten": round(achsenabschnitt + steigung * (letzter_ordinal + 90), 1),
             "datum_in_3_monaten": (letztes_datum + timedelta(days=90)).isoformat(),
+            "ziel_datum": ziel_datum,
         }
 
     alle_labels = sorted(labels_menge)
     gewicht_je_datum = {e["datum"]: e["wert"] for e in eintraege_aufsteigend}
 
-    # Für Chart.js: pro Label (Datum) entweder der Wert oder null (= keine
-    # Linie an der Stelle). Beide Listen haben dieselbe Länge wie alle_labels.
     gewicht_werte = [gewicht_je_datum.get(d) for d in alle_labels]
     projektion_werte = [projektion_je_datum.get(d) for d in alle_labels]
 
@@ -440,11 +629,20 @@ def gewicht_verlauf():
 @app.route("/gewicht/<int:eintrag_id>/loeschen", methods=["POST"])
 def gewicht_loeschen(eintrag_id):
     conn = get_db()
-    conn.execute("DELETE FROM gewicht WHERE id = ?", (eintrag_id,))
+    # "AND benutzer_id = ?" ist hier entscheidend: verhindert, dass jemand
+    # durch Erraten einer fremden ID die Daten eines ANDEREN Benutzers löscht.
+    conn.execute(
+        "DELETE FROM gewicht WHERE id = ? AND benutzer_id = ?",
+        (eintrag_id, aktueller_benutzer_id()),
+    )
     conn.commit()
     conn.close()
     return redirect(url_for("gewicht_verlauf"))
 
+
+# ---------------------------------------------------------------------
+# Ernährung
+# ---------------------------------------------------------------------
 
 def _zahl_oder_none(feldwert):
     """Wandelt einen Formularwert in eine Kommazahl um, oder None wenn leer.
@@ -456,17 +654,20 @@ def _zahl_oder_none(feldwert):
 
 @app.route("/ernaehrung", methods=["GET", "POST"])
 def ernaehrung():
+    benutzer_id = aktueller_benutzer_id()
+
     if request.method == "POST":
         conn = get_db()
         conn.execute(
-            """INSERT INTO ernaehrung (datum, kalorien, protein, fett, kohlenhydrate)
-               VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(datum) DO UPDATE SET
+            """INSERT INTO ernaehrung (benutzer_id, datum, kalorien, protein, fett, kohlenhydrate)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(benutzer_id, datum) DO UPDATE SET
                    kalorien = excluded.kalorien,
                    protein = excluded.protein,
                    fett = excluded.fett,
                    kohlenhydrate = excluded.kohlenhydrate""",
             (
+                benutzer_id,
                 request.form["datum"],
                 int(request.form["kalorien"]),
                 _zahl_oder_none(request.form.get("protein")),
@@ -478,12 +679,10 @@ def ernaehrung():
         conn.close()
         return redirect(url_for("index"))
 
-    # ?datum=... erlaubt, auch einen ANDEREN Tag als heute zu bearbeiten
-    # (z.B. um einen Tippfehler von vorgestern zu korrigieren).
     datum = request.args.get("datum", date.today().isoformat())
     conn = get_db()
     vorhandener_eintrag = conn.execute(
-        "SELECT * FROM ernaehrung WHERE datum = ?", (datum,)
+        "SELECT * FROM ernaehrung WHERE benutzer_id = ? AND datum = ?", (benutzer_id, datum)
     ).fetchone()
     conn.close()
 
@@ -494,9 +693,10 @@ def ernaehrung():
 
 @app.route("/ernaehrung/verlauf")
 def ernaehrung_verlauf():
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
     eintraege = conn.execute(
-        "SELECT * FROM ernaehrung ORDER BY datum DESC"
+        "SELECT * FROM ernaehrung WHERE benutzer_id = ? ORDER BY datum DESC", (benutzer_id,)
     ).fetchall()
     conn.close()
     return render_template("ernaehrung_verlauf.html", eintraege=eintraege)
@@ -505,22 +705,28 @@ def ernaehrung_verlauf():
 @app.route("/ernaehrung/<datum>/loeschen", methods=["POST"])
 def ernaehrung_loeschen(datum):
     conn = get_db()
-    conn.execute("DELETE FROM ernaehrung WHERE datum = ?", (datum,))
+    conn.execute(
+        "DELETE FROM ernaehrung WHERE benutzer_id = ? AND datum = ?",
+        (aktueller_benutzer_id(), datum),
+    )
     conn.commit()
     conn.close()
     return redirect(url_for("ernaehrung_verlauf"))
 
 
+# ---------------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------------
+
 @app.route("/training/neu", methods=["GET", "POST"])
 def training_neu():
     """Startet ein neues Training (den 'Container' für die Übungen von
-    heute) und leitet direkt in die Trainingsansicht weiter, wo Übungen
-    hinzugefügt werden können."""
+    heute) und leitet direkt in die Trainingsansicht weiter."""
     if request.method == "POST":
         conn = get_db()
         cursor = conn.execute(
-            "INSERT INTO trainingseinheit (datum, erstellt_um) VALUES (?, ?)",
-            (request.form["datum"], datetime.now().isoformat()),
+            "INSERT INTO trainingseinheit (benutzer_id, datum, erstellt_um) VALUES (?, ?, ?)",
+            (aktueller_benutzer_id(), request.form["datum"], datetime.now().isoformat()),
         )
         neue_id = cursor.lastrowid
         conn.commit()
@@ -533,10 +739,12 @@ def training_neu():
 @app.route("/training/<int:einheit_id>")
 def training_session(einheit_id):
     """Übersicht EINES Trainings: alle bisher hinzugefügten Übungen mit
-    ihren Sätzen, plus Möglichkeit weitere Übungen hinzuzufügen."""
+    ihren Sätzen. "AND benutzer_id = ?" stellt sicher, dass niemand ein
+    fremdes Training über die ID aufrufen kann."""
     conn = get_db()
     einheit = conn.execute(
-        "SELECT * FROM trainingseinheit WHERE id = ?", (einheit_id,)
+        "SELECT * FROM trainingseinheit WHERE id = ? AND benutzer_id = ?",
+        (einheit_id, aktueller_benutzer_id()),
     ).fetchone()
     if einheit is None:
         conn.close()
@@ -549,7 +757,6 @@ def training_session(einheit_id):
     ).fetchall()
     conn.close()
 
-    # Nach Übung gruppieren, aber Reihenfolge des Hinzufügens beibehalten
     uebungen_gruppiert = {}
     for satz in saetze:
         uebungen_gruppiert.setdefault(satz["uebung"], []).append(satz)
@@ -562,9 +769,15 @@ def training_session(einheit_id):
 @app.route("/training/<int:einheit_id>/loeschen", methods=["POST"])
 def training_loeschen(einheit_id):
     conn = get_db()
-    conn.execute("DELETE FROM trainingssatz WHERE trainingseinheit_id = ?", (einheit_id,))
-    conn.execute("DELETE FROM trainingseinheit WHERE id = ?", (einheit_id,))
-    conn.commit()
+    # Zugehörigkeit prüfen, bevor irgendwas gelöscht wird.
+    gehoert_mir = conn.execute(
+        "SELECT id FROM trainingseinheit WHERE id = ? AND benutzer_id = ?",
+        (einheit_id, aktueller_benutzer_id()),
+    ).fetchone()
+    if gehoert_mir:
+        conn.execute("DELETE FROM trainingssatz WHERE trainingseinheit_id = ?", (einheit_id,))
+        conn.execute("DELETE FROM trainingseinheit WHERE id = ?", (einheit_id,))
+        conn.commit()
     conn.close()
     return redirect(url_for("verlauf"))
 
@@ -572,11 +785,12 @@ def training_loeschen(einheit_id):
 @app.route("/training/<int:einheit_id>/uebung/neu", methods=["GET", "POST"])
 def training_uebung_neu(einheit_id):
     """Formular, um EINE Übung (mit beliebig vielen Sätzen) zu einem
-    bestehenden Training hinzuzufügen. Nach dem Speichern geht's zurück zur
-    Trainingsübersicht, wo die nächste Übung hinzugefügt werden kann."""
+    bestehenden Training hinzuzufügen."""
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
     einheit = conn.execute(
-        "SELECT * FROM trainingseinheit WHERE id = ?", (einheit_id,)
+        "SELECT * FROM trainingseinheit WHERE id = ? AND benutzer_id = ?",
+        (einheit_id, benutzer_id),
     ).fetchone()
     if einheit is None:
         conn.close()
@@ -587,7 +801,10 @@ def training_uebung_neu(einheit_id):
         gewichte = request.form.getlist("gewicht[]")
         wiederholungen_liste = request.form.getlist("wiederholungen[]")
 
-        conn.execute("INSERT OR IGNORE INTO uebungen (name) VALUES (?)", (uebung,))
+        conn.execute(
+            "INSERT OR IGNORE INTO uebungen (benutzer_id, name) VALUES (?, ?)",
+            (benutzer_id, uebung),
+        )
 
         satznummer = 0
         for gewicht_roh, wdh_roh in zip(gewichte, wiederholungen_liste):
@@ -610,8 +827,10 @@ def training_uebung_neu(einheit_id):
         conn.close()
         return redirect(url_for("training_session", einheit_id=einheit_id))
 
-    uebungen_liste = conn.execute("SELECT name FROM uebungen ORDER BY name").fetchall()
-    letzte_leistung = hole_letzte_leistung(conn)
+    uebungen_liste = conn.execute(
+        "SELECT name FROM uebungen WHERE benutzer_id = ? ORDER BY name", (benutzer_id,)
+    ).fetchall()
+    letzte_leistung = hole_letzte_leistung(conn, benutzer_id)
     conn.close()
 
     return render_template(
@@ -625,25 +844,30 @@ def training_uebung_neu(einheit_id):
 @app.route("/training/<int:einheit_id>/uebung/<uebung>/loeschen", methods=["POST"])
 def training_uebung_loeschen(einheit_id, uebung):
     conn = get_db()
-    conn.execute(
-        "DELETE FROM trainingssatz WHERE trainingseinheit_id = ? AND uebung = ?",
-        (einheit_id, uebung),
-    )
-    conn.commit()
+    gehoert_mir = conn.execute(
+        "SELECT id FROM trainingseinheit WHERE id = ? AND benutzer_id = ?",
+        (einheit_id, aktueller_benutzer_id()),
+    ).fetchone()
+    if gehoert_mir:
+        conn.execute(
+            "DELETE FROM trainingssatz WHERE trainingseinheit_id = ? AND uebung = ?",
+            (einheit_id, uebung),
+        )
+        conn.commit()
     conn.close()
     return redirect(url_for("training_session", einheit_id=einheit_id))
 
 
 @app.route("/verlauf")
 def verlauf():
-    """Eigener Menüpunkt: zeigt sowohl die Liste vergangener Trainings als
-    auch, für ausgewählte Übungen, den grafischen UND tabellarischen
-    Verlauf -- sowohl die berechnete Maximalleistung (e1RM) als auch die
-    tatsächlich bewegten Gewichte je Satz."""
+    """Eigener Menüpunkt: Liste vergangener Trainings sowie, für
+    ausgewählte Übungen, grafischer UND tabellarischer Verlauf."""
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
 
     einheiten_rohdaten = conn.execute(
-        "SELECT * FROM trainingseinheit ORDER BY erstellt_um DESC"
+        "SELECT * FROM trainingseinheit WHERE benutzer_id = ? ORDER BY erstellt_um DESC",
+        (benutzer_id,),
     ).fetchall()
     einheiten = []
     for einheit in einheiten_rohdaten:
@@ -657,7 +881,9 @@ def verlauf():
             "uebungen": [u["uebung"] for u in uebungen_namen],
         })
 
-    alle_uebungen = conn.execute("SELECT name FROM uebungen ORDER BY name").fetchall()
+    alle_uebungen = conn.execute(
+        "SELECT name FROM uebungen WHERE benutzer_id = ? ORDER BY name", (benutzer_id,)
+    ).fetchall()
     ausgewaehlte_uebungen = request.args.getlist("uebung")
 
     uebungs_daten = []
@@ -668,13 +894,13 @@ def verlauf():
             SELECT te.datum AS datum, ts.gewicht, ts.wiederholungen, ts.satznummer
             FROM trainingssatz ts
             JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
-            WHERE ts.uebung = ?
+            WHERE ts.uebung = ? AND te.benutzer_id = ?
             ORDER BY te.datum, ts.satznummer
-        """, (name,)).fetchall()
+        """, (name, benutzer_id)).fetchall()
 
         tabellen_zeilen = []
-        rohdaten_punkte = []  # jeder einzelne Satz als Punkt fürs Diagramm
-        beste_je_tag = {}     # höchste berechnete Maximalleistung pro Tag
+        rohdaten_punkte = []
+        beste_je_tag = {}
 
         for satz in saetze:
             e1rm = berechne_e1rm(satz["gewicht"], satz["wiederholungen"])
@@ -695,7 +921,7 @@ def verlauf():
         uebungs_daten.append({
             "name": name,
             "bestleistung": max(beste_je_tag.values()) if beste_je_tag else 0,
-            "tabellen_zeilen": list(reversed(tabellen_zeilen)),  # neueste zuerst
+            "tabellen_zeilen": list(reversed(tabellen_zeilen)),
             "e1rm_punkte": e1rm_punkte,
             "rohdaten_punkte": rohdaten_punkte,
         })

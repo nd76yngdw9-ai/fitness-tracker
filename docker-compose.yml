@@ -1,44 +1,24 @@
-# Zwei komplett getrennte Instanzen derselben App:
-# - "tracker-benedikt" auf Port 5000, eigene Datenbank, deine Ziele
-# - "tracker-freund" auf Port 5001, eigene Datenbank, eigene Ziele
-#
-# Die Werte unten lassen sich in Portainer unter "Environment variables"
-# bearbeiten, OHNE dass du den Code auf GitHub anfassen musst. Nach dem
-# Ändern dort einfach "Update the stack" klicken.
-#
-# WICHTIG: BENUTZER_* / PASSWORT_* unbedingt setzen, sobald der Tracker von
-# außen (nicht nur im Heimnetz) erreichbar ist -- sonst kann jeder mit dem
-# Link deine Daten sehen und löschen!
+# Nur noch EIN Service -- mehrere Personen nutzen jetzt dieselbe App mit
+# eigenen Benutzerkonten (Login/Registrierung), statt getrennter Container.
+# SECRET_KEY unbedingt auf einen eigenen, langen Zufallswert setzen (sonst
+# werden bei jedem Neustart alle Logins ungültig).
 
 services:
-  tracker-benedikt:
+  tracker:
     build: .
-    container_name: fitness-tracker-benedikt
+    container_name: fitness-tracker
     restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
-      ZIELGEWICHT_KG: ${ZIELGEWICHT_BENEDIKT:-100}
-      KALORIENZIEL: ${KALORIENZIEL_BENEDIKT:-3600}
-      TRACKER_BENUTZER: ${BENUTZER_BENEDIKT:-}
-      TRACKER_PASSWORT: ${PASSWORT_BENEDIKT:-}
+      SECRET_KEY: ${SECRET_KEY:-bitte-aendern}
+      ZIELGEWICHT_KG: ${ZIELGEWICHT_STANDARD:-80}
+      KALORIENZIEL: ${KALORIENZIEL_STANDARD:-2500}
+      # Optional: wenn gesetzt, muss man diesen Code bei der Registrierung
+      # eingeben (verhindert, dass Fremde sich einfach ein Konto anlegen).
+      REGISTRIERUNGS_CODE: ${REGISTRIERUNGS_CODE:-}
     volumes:
-      - tracker-data-benedikt:/data
-
-  tracker-freund:
-    build: .
-    container_name: fitness-tracker-freund
-    restart: unless-stopped
-    ports:
-      - "5001:5000"
-    environment:
-      ZIELGEWICHT_KG: ${ZIELGEWICHT_FREUND:-80}
-      KALORIENZIEL: ${KALORIENZIEL_FREUND:-2800}
-      TRACKER_BENUTZER: ${BENUTZER_FREUND:-}
-      TRACKER_PASSWORT: ${PASSWORT_FREUND:-}
-    volumes:
-      - tracker-data-freund:/data
+      - tracker-data:/data
 
 volumes:
-  tracker-data-benedikt:
-  tracker-data-freund:
+  tracker-data:

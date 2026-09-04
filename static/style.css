@@ -203,6 +203,19 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     margin-top: 6px;
 }
 
+.auth-content {
+    padding-top: 60px;
+}
+
+.fehlertext {
+    background: #fef2f2;
+    color: #dc2626;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+}
+
 .form button[type="submit"] {
     margin-top: 20px;
     padding: 14px;

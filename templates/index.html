@@ -3,7 +3,10 @@
 {% block content %}
 
 <div class="dashboard-header">
-    <h1>Dein Fortschritt</h1>
+    <div>
+        <h1>Dein Fortschritt</h1>
+        <p class="muted" style="margin-top: -8px;">{{ benutzername }}</p>
+    </div>
     <a href="{{ url_for('einstellungen') }}" class="settings-link" title="Einstellungen">⚙️</a>
 </div>
 
@@ -12,10 +15,12 @@
     {% if letztes_gewicht %}
         <p class="big-number">{{ letztes_gewicht["wert"] }} kg</p>
         <p class="muted">Ziel: {{ zielgewicht }} kg</p>
+        {% if fortschritt_prozent is not none %}
         <div class="progress-bar">
             <div class="progress-fill" style="width: {{ fortschritt_prozent }}%;"></div>
         </div>
         <p class="muted">{{ fortschritt_prozent }} % erreicht</p>
+        {% endif %}
         <a href="{{ url_for('gewicht_verlauf') }}" class="link">Verlauf ansehen &rarr;</a>
     {% else %}
         <p class="muted">Noch kein Gewicht eingetragen.</p>

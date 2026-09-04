@@ -25,9 +25,11 @@ PythonAnywhere hostet die App dauerhaft unter einer eigenen
 `https://DEINNAME.pythonanywhere.com`-Adresse. Kostenlos, keine
 Kreditkarte nötig, dein Heimnetz/Umbrel bleibt davon komplett unberührt.
 
-**Wichtig:** die kostenlose Version erlaubt nur EINE Web-App pro Account.
-Für zwei Personen (dich + einen Freund) braucht ihr also zwei separate
-kostenlose Accounts (unterschiedliche E-Mail-Adressen).
+**Mehrere Personen, eine App:** Seit der Benutzerkonten-Funktion braucht
+ihr nur noch EINEN PythonAnywhere-Account. Du und dein Freund registriert
+euch beide über die Login-Seite der App mit eigenem Benutzernamen/Passwort
+-- eure Daten (Gewicht, Ernährung, Training) sind komplett getrennt,
+obwohl beide dieselbe Adresse nutzen.
 
 ### 1. Account erstellen
 
@@ -75,13 +77,20 @@ pfad = '/home/DEINNAME/tracker'
 if pfad not in sys.path:
     sys.path.insert(0, pfad)
 
-# Zielgewicht/Kalorienziel-Startwerte (später in der App unter
-# "Einstellungen" änderbar) sowie Login-Zugangsdaten -- UNBEDINGT setzen,
-# die App ist sonst für jeden im Internet offen und ohne Passwort nutzbar!
-os.environ['ZIELGEWICHT_KG'] = '100'
-os.environ['KALORIENZIEL'] = '3600'
-os.environ['TRACKER_BENUTZER'] = 'dein-benutzername'
-os.environ['TRACKER_PASSWORT'] = 'dein-sicheres-passwort'
+# WICHTIG: ein eigener, langer Zufallswert -- damit Logins bei einem
+# Neustart der App nicht ungültig werden. Einfach irgendeine lange,
+# zufällige Zeichenkette eintragen (z.B. mit einem Passwort-Generator).
+os.environ['SECRET_KEY'] = 'trag-hier-eine-lange-zufaellige-zeichenkette-ein'
+
+# Startwerte für NEU REGISTRIERTE Benutzer (jeder kann sie danach unter
+# "Einstellungen" individuell für sich ändern).
+os.environ['ZIELGEWICHT_KG'] = '80'
+os.environ['KALORIENZIEL'] = '2500'
+
+# Optional: wenn gesetzt, muss man diesen Code bei der Registrierung
+# eingeben -- verhindert, dass Fremde sich auf deiner öffentlichen App
+# einfach ein Konto anlegen. Leer lassen/Zeile löschen für offene Registrierung.
+os.environ['REGISTRIERUNGS_CODE'] = 'euer-geheimwort'
 
 from app import app as application
 ```
@@ -98,21 +107,22 @@ Zurück auf der "Web"-Seite, im Abschnitt "Virtualenv" den Pfad eintragen:
 Falls du schon eine `tracker.db` von einer früheren Installation hast:
 im Dashboard auf **"Files"** gehen, in den Ordner `tracker/` navigieren,
 und die Datei per Drag & Drop hochladen (überschreibt die leere, frisch
-angelegte `tracker.db`).
+angelegte `tracker.db`). Wichtig: registriere dich danach als **erstes**
+neues Konto -- deine alte (migrierte) Historie wird automatisch dem
+allerersten neu registrierten Konto zugeordnet.
 
 ### 8. Neu laden
 
 Auf der "Web"-Seite den großen grünen **"Reload"**-Button klicken. Danach
-ist die App unter `https://DEINNAME.pythonanywhere.com` erreichbar --
-auf jedem Gerät, ganz ohne zusätzliche App, einfach im Browser öffnen.
-Beim ersten Aufruf fragt der Browser nach den Zugangsdaten aus Schritt 5.
+ist die App unter `https://DEINNAME.pythonanywhere.com` erreichbar.
 
-### Für deinen Freund
+### Konten anlegen
 
-Schritte 1-8 in einem zweiten, separaten PythonAnywhere-Account
-wiederholen (andere E-Mail-Adresse), mit seinen eigenen Werten in Schritt 5
-(`ZIELGEWICHT_KG`, `KALORIENZIEL`, eigener Benutzername/Passwort). Seine
-Daten landen dann komplett getrennt in seinem eigenen Account.
+Einfach die Seite öffnen -- sie leitet automatisch zur Login-Seite um.
+Dort auf "Registrieren" klicken, Benutzername/Passwort wählen (plus den
+Registrierungscode aus Schritt 5, falls gesetzt). Du und dein Freund
+registriert euch jeweils mit eigenem Benutzernamen -- fertig, eure Daten
+sind komplett getrennt.
 
 ### Account "am Leben" halten
 
@@ -141,9 +151,8 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Dann im Browser: `http://localhost:5000`. Ohne gesetzte
-`TRACKER_BENUTZER`/`TRACKER_PASSWORT`-Umgebungsvariablen ist lokal kein
-Login nötig.
+Dann im Browser: `http://localhost:5000`. Die Seite leitet automatisch zur
+Login-Seite -- dort einmalig über "Registrieren" ein Konto anlegen.
 
 ## Wie es funktioniert (kurz erklärt)
 
@@ -154,10 +163,11 @@ Login nötig.
   (`tracker.db`) lebt – kein separater Datenbank-Server nötig.
 - **Templates** sind HTML-Dateien mit Platzhaltern (`{{ variable }}`), die
   Flask beim Aufruf mit echten Daten aus der Datenbank füllt.
-- **Login-Schutz**: `app.py` prüft vor jeder Anfrage, ob
-  `TRACKER_BENUTZER`/`TRACKER_PASSWORT` gesetzt sind. Wenn ja, verlangt der
-  Browser einen Benutzernamen/Passwort (HTTP Basic Auth), bevor irgendeine
-  Seite angezeigt wird.
+- **Login-Schutz**: Jede Seite verlangt eine aktive Anmeldung (`app.py`
+  prüft das vor jeder Anfrage). Beim Login/Registrieren setzt Flask ein
+  verschlüsseltes Cookie ("Session"), das merkt, wer eingeloggt ist --
+  dafür ist der `SECRET_KEY` nötig. Passwörter werden nie im Klartext
+  gespeichert, sondern als Hash (`generate_password_hash`).
 
 ## (Alternative) Selbsthosten mit Docker
 
