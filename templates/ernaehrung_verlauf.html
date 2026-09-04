@@ -5,34 +5,26 @@
 <h1>Ernährungsverlauf</h1>
 
 {% if eintraege %}
-<div class="table-wrapper">
-<table class="table">
-    <tr>
-        <th>Datum</th>
-        <th>kcal</th>
-        <th>Protein</th>
-        <th>Fett</th>
-        <th>Kohlenh.</th>
-        <th></th>
-    </tr>
     {% for e in eintraege %}
-    <tr>
-        <td>{{ e["datum"] }}</td>
-        <td>{{ e["kalorien"] }}</td>
-        <td>{{ "%g"|format(e["protein"]) ~ " g" if e["protein"] is not none else "–" }}</td>
-        <td>{{ "%g"|format(e["fett"]) ~ " g" if e["fett"] is not none else "–" }}</td>
-        <td>{{ "%g"|format(e["kohlenhydrate"]) ~ " g" if e["kohlenhydrate"] is not none else "–" }}</td>
-        <td>
+    <div class="card">
+        <div class="ernaehrung-zeile-kopf">
+            <strong>{{ e["datum"] }}</strong>
+            <span class="ernaehrung-kcal">{{ e["kalorien"] }} kcal</span>
+        </div>
+        <p class="muted">
+            Protein: {{ "%g"|format(e["protein"]) ~ " g" if e["protein"] is not none else "–" }}
+            &middot; Fett: {{ "%g"|format(e["fett"]) ~ " g" if e["fett"] is not none else "–" }}
+            &middot; Kohlenhydrate: {{ "%g"|format(e["kohlenhydrate"]) ~ " g" if e["kohlenhydrate"] is not none else "–" }}
+        </p>
+        <div class="ernaehrung-aktionen">
             <a href="{{ url_for('ernaehrung', datum=e['datum']) }}" class="link">Bearbeiten</a>
             <form method="post" action="{{ url_for('ernaehrung_loeschen', datum=e['datum']) }}"
-                  onsubmit="return confirm('Eintrag löschen?');" class="inline-form">
+                  onsubmit="return confirm('Eintrag löschen?');">
                 <button type="submit" class="danger-link">Löschen</button>
             </form>
-        </td>
-    </tr>
+        </div>
+    </div>
     {% endfor %}
-</table>
-</div>
 {% else %}
 <p class="muted">Noch keine Einträge.</p>
 {% endif %}

@@ -216,6 +216,37 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     margin-bottom: 10px;
 }
 
+.ernaehrung-zeile-kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.ernaehrung-kcal {
+    font-weight: 700;
+    font-size: 1.1rem;
+    white-space: nowrap;
+}
+
+.ernaehrung-aktionen {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+.form select {
+    font-size: 1rem;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    color: var(--text);
+    -webkit-appearance: none;
+    appearance: none;
+}
+
 .form button[type="submit"] {
     margin-top: 20px;
     padding: 14px;

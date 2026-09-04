@@ -25,15 +25,17 @@
 {% endif %}
 
 <h2 class="section-heading">Übungen</h2>
-<form method="get" class="form">
-    {% for u in alle_uebungen %}
-    <label class="checkbox-label">
-        <input type="checkbox" name="uebung" value="{{ u['name'] }}"
-               {% if u['name'] in ausgewaehlte_uebungen %}checked{% endif %}>
-        {{ u["name"] }}
-    </label>
-    {% endfor %}
-    <button type="submit" style="margin-top: 14px;">Anzeigen</button>
+<form method="get" class="form" id="uebung-auswahl-form">
+    <label for="uebung-auswahl">Übung</label>
+    <select id="uebung-auswahl" name="uebung" onchange="this.form.submit()">
+        <option value="">-- Übung wählen --</option>
+        {% for u in alle_uebungen %}
+        <option value="{{ u['name'] }}" {% if u['name'] == ausgewaehlte_uebung %}selected{% endif %}>
+            {{ u["name"] }}
+        </option>
+        {% endfor %}
+    </select>
+    <noscript><button type="submit" style="margin-top: 14px;">Anzeigen</button></noscript>
 </form>
 
 {% if uebungs_daten %}
@@ -45,15 +47,14 @@
     </p>
 </div>
 
-{% for u in uebungs_daten %}
 <div class="card">
-    <h2>{{ u["name"] }}</h2>
-    <p class="big-number">{{ u["bestleistung"] }} kg</p>
+    <h2>{{ uebungs_daten["name"] }}</h2>
+    <p class="big-number">{{ uebungs_daten["bestleistung"] }} kg</p>
     <p class="muted">Berechnete Maximalleistung (geschätztes 1-Wdh.-Max)</p>
 
     <table class="table" style="margin-top: 10px;">
         <tr><th>Datum</th><th>Satz</th><th>Gewicht</th><th>Wdh.</th><th>e1RM</th></tr>
-        {% for zeile in u["tabellen_zeilen"] %}
+        {% for zeile in uebungs_daten["tabellen_zeilen"] %}
         <tr>
             <td>{{ zeile["datum"] }}</td>
             <td>{{ zeile["satznummer"] }}</td>
@@ -64,7 +65,8 @@
         {% endfor %}
     </table>
 </div>
-{% endfor %}
+{% elif ausgewaehlte_uebung %}
+<p class="muted">Für diese Übung sind noch keine Sätze eingetragen.</p>
 {% endif %}
 
 {% endblock %}
@@ -74,24 +76,19 @@
 <script>
     const chartDaten = {{ chart_daten_json | safe }};
     const chartLabels = {{ chart_labels_json | safe }};
-    const farben = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#9333ea", "#0891b2"];
+    const farbe = "#2563eb";
 
-    const datensaetze = [];
-    Object.keys(chartDaten).forEach(function (name, index) {
-        const farbe = farben[index % farben.length];
-
-        // Linie: berechnete Maximalleistung (e1RM), ein Wert pro Tag
-        datensaetze.push({
+    const name = Object.keys(chartDaten)[0];
+    const datensaetze = [
+        {
             label: name + " (berechnetes Max)",
             data: chartDaten[name].e1rm.map(function (p) { return { x: p.datum, y: p.wert }; }),
             borderColor: farbe,
             backgroundColor: farbe,
             tension: 0.2,
             pointRadius: 3,
-        });
-
-        // Punkte: jeder einzelne Satz mit seinem tatsächlichen Gewicht
-        datensaetze.push({
+        },
+        {
             label: name + " (einzelne Sätze)",
             data: chartDaten[name].rohdaten.map(function (p) { return { x: p.datum, y: p.wert }; }),
             borderColor: farbe,
@@ -102,8 +99,8 @@
             pointBackgroundColor: "transparent",
             pointBorderColor: farbe,
             pointBorderWidth: 1.5,
-        });
-    });
+        },
+    ];
 
     new Chart(document.getElementById("verlauf-chart"), {
         type: "line",

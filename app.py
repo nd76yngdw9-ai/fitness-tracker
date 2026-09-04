@@ -884,23 +884,24 @@ def verlauf():
     alle_uebungen = conn.execute(
         "SELECT name FROM uebungen WHERE benutzer_id = ? ORDER BY name", (benutzer_id,)
     ).fetchall()
-    ausgewaehlte_uebungen = request.args.getlist("uebung")
+    ausgewaehlte_uebung = request.args.get("uebung") or None
 
-    uebungs_daten = []
-    alle_chart_labels = set()
+    uebungs_daten = None
+    alle_chart_labels = []
 
-    for name in ausgewaehlte_uebungen:
+    if ausgewaehlte_uebung:
         saetze = conn.execute("""
             SELECT te.datum AS datum, ts.gewicht, ts.wiederholungen, ts.satznummer
             FROM trainingssatz ts
             JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
             WHERE ts.uebung = ? AND te.benutzer_id = ?
             ORDER BY te.datum, ts.satznummer
-        """, (name, benutzer_id)).fetchall()
+        """, (ausgewaehlte_uebung, benutzer_id)).fetchall()
 
         tabellen_zeilen = []
         rohdaten_punkte = []
         beste_je_tag = {}
+        chart_labels_menge = set()
 
         for satz in saetze:
             e1rm = berechne_e1rm(satz["gewicht"], satz["wiederholungen"])
@@ -912,35 +913,38 @@ def verlauf():
                 "e1rm": e1rm,
             })
             rohdaten_punkte.append({"datum": satz["datum"], "wert": satz["gewicht"]})
-            alle_chart_labels.add(satz["datum"])
+            chart_labels_menge.add(satz["datum"])
             if satz["datum"] not in beste_je_tag or e1rm > beste_je_tag[satz["datum"]]:
                 beste_je_tag[satz["datum"]] = e1rm
 
         e1rm_punkte = [{"datum": tag, "wert": beste_je_tag[tag]} for tag in sorted(beste_je_tag)]
 
-        uebungs_daten.append({
-            "name": name,
+        uebungs_daten = {
+            "name": ausgewaehlte_uebung,
             "bestleistung": max(beste_je_tag.values()) if beste_je_tag else 0,
             "tabellen_zeilen": list(reversed(tabellen_zeilen)),
             "e1rm_punkte": e1rm_punkte,
             "rohdaten_punkte": rohdaten_punkte,
-        })
+        }
+        alle_chart_labels = sorted(chart_labels_menge)
 
     conn.close()
 
-    chart_daten = {
-        u["name"]: {"e1rm": u["e1rm_punkte"], "rohdaten": u["rohdaten_punkte"]}
-        for u in uebungs_daten
-    }
+    chart_daten = {}
+    if uebungs_daten:
+        chart_daten[uebungs_daten["name"]] = {
+            "e1rm": uebungs_daten["e1rm_punkte"],
+            "rohdaten": uebungs_daten["rohdaten_punkte"],
+        }
 
     return render_template(
         "verlauf.html",
         einheiten=einheiten,
         alle_uebungen=alle_uebungen,
-        ausgewaehlte_uebungen=ausgewaehlte_uebungen,
+        ausgewaehlte_uebung=ausgewaehlte_uebung,
         uebungs_daten=uebungs_daten,
         chart_daten_json=json.dumps(chart_daten, ensure_ascii=False),
-        chart_labels_json=json.dumps(sorted(alle_chart_labels)),
+        chart_labels_json=json.dumps(alle_chart_labels),
     )
 
 
