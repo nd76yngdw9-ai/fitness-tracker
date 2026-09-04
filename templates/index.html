@@ -36,10 +36,44 @@
             {% if ernaehrung_heute["fett"] is not none %} · Fett: {{ ernaehrung_heute["fett"] }} g{% endif %}
             {% if ernaehrung_heute["kohlenhydrate"] is not none %} · Kohlenhydrate: {{ ernaehrung_heute["kohlenhydrate"] }} g{% endif %}
         </p>
+        {% if proteinziel and ernaehrung_heute["protein"] is not none %}
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ [100, (ernaehrung_heute['protein'] / proteinziel * 100) | round(1)] | min }}%;"></div>
+        </div>
+        <p class="muted">Protein-Ziel: {{ ernaehrung_heute["protein"] }} / {{ proteinziel }} g</p>
+        {% endif %}
     {% else %}
         <p class="muted">Heute noch nichts eingetragen.</p>
     {% endif %}
     <a href="{{ url_for('ernaehrung_verlauf') }}" class="link">Verlauf ansehen &rarr;</a>
+</div>
+
+<div class="card">
+    <h2>Diese Woche (letzte 7 Tage)</h2>
+    <div class="wochenrueckblick-raster">
+        <div>
+            <p class="big-number" style="font-size: 1.3rem;">{{ wochenrueckblick["gewicht_schnitt"] if wochenrueckblick["gewicht_schnitt"] is not none else "–" }}</p>
+            <p class="muted">Ø Gewicht (kg)</p>
+        </div>
+        <div>
+            <p class="big-number" style="font-size: 1.3rem;">{{ wochenrueckblick["kalorien_schnitt"] if wochenrueckblick["kalorien_schnitt"] is not none else "–" }}</p>
+            <p class="muted">Ø kcal</p>
+        </div>
+        <div>
+            <p class="big-number" style="font-size: 1.3rem;">{{ wochenrueckblick["trainings_anzahl"] }}</p>
+            <p class="muted">Trainings</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Trainings-Kalender</h2>
+    <div class="heatmap-raster">
+        {% for tag in heatmap_tage %}
+        <div class="heatmap-tag {{ 'heatmap-trainiert' if tag['trainiert'] else '' }}" title="{{ tag['datum'] }}"></div>
+        {% endfor %}
+    </div>
+    <p class="muted" style="margin-top: 8px;">Letzte 12 Wochen</p>
 </div>
 
 <div class="card">

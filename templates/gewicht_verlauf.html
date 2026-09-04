@@ -62,17 +62,30 @@
 <script>
     const alleLabels = {{ labels_json | safe }};
     const gewichtWerte = {{ gewicht_werte_json | safe }};
+    const durchschnittWerte = {{ durchschnitt_werte_json | safe }};
     const projektionWerte = {{ projektion_werte_json | safe }};
     const zielgewicht = {{ zielgewicht }};
 
     const datensaetze = [
         {
-            label: "Gewicht",
+            label: "Gewicht (Tageswert)",
             data: gewichtWerte,
+            borderColor: "#cbd5e1",
+            backgroundColor: "#cbd5e1",
+            spanGaps: true,
+            tension: 0.2,
+            pointRadius: 3,
+            borderWidth: 1,
+        },
+        {
+            label: "7-Tage-Durchschnitt",
+            data: durchschnittWerte,
             borderColor: "#2563eb",
             backgroundColor: "#2563eb",
             spanGaps: true,
-            tension: 0.2,
+            tension: 0.3,
+            borderWidth: 2.5,
+            pointRadius: 0,
         },
         {
             label: "Projektion (3 Monate)",

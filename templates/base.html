@@ -12,6 +12,13 @@
 </head>
 <body>
     <main class="content">
+        {% with nachrichten = get_flashed_messages() %}
+            {% if nachrichten %}
+                {% for nachricht in nachrichten %}
+                <div class="flash-nachricht">{{ nachricht }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </main>
 

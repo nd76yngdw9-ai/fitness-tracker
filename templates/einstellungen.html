@@ -19,11 +19,20 @@
     <input type="number" id="kalorienziel" name="kalorienziel"
            value="{{ werte['kalorienziel'] }}" required>
 
+    <label for="proteinziel">Protein-Ziel (g/Tag, optional)</label>
+    <input type="text" inputmode="decimal" id="proteinziel" name="proteinziel"
+           value="{{ werte['proteinziel'] if werte['proteinziel'] is not none else '' }}"
+           placeholder="z.B. 180">
+
     <button type="submit">Speichern</button>
 </form>
 
 <p class="muted" style="margin-top: 16px;">
     <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
+</p>
+
+<p class="muted" style="margin-top: 8px;">
+    <a href="{{ url_for('export_csv') }}" class="link">Alle Daten als CSV exportieren</a>
 </p>
 
 <form method="post" action="{{ url_for('logout') }}" style="margin-top: 20px;">

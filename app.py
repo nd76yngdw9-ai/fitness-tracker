@@ -23,10 +23,15 @@ Datenmodell:
   eigenem Gewicht und eigenen Wiederholungen.
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import (
+    Flask, render_template, request, redirect, url_for, session,
+    flash, get_flashed_messages, Response,
+)
 import sqlite3
 import os
 import json
+import csv
+import io
 from datetime import date, datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -217,23 +222,29 @@ def init_db():
                     benutzer_id INTEGER PRIMARY KEY,
                     startgewicht REAL,
                     zielgewicht REAL NOT NULL,
-                    kalorienziel INTEGER NOT NULL
+                    kalorienziel INTEGER NOT NULL,
+                    proteinziel REAL
                 )
             """)
             alte_zeile = conn.execute("SELECT * FROM einstellungen_alt WHERE id = 1").fetchone()
             if alte_zeile:
                 conn.execute(
-                    "INSERT INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel) VALUES (1, NULL, ?, ?)",
+                    "INSERT INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel, proteinziel) VALUES (1, NULL, ?, ?, NULL)",
                     (alte_zeile["zielgewicht"], alte_zeile["kalorienziel"]),
                 )
             conn.execute("DROP TABLE einstellungen_alt")
+        elif "proteinziel" not in spalten:
+            # Zwischen-Version: hatte schon benutzer_id, aber noch kein
+            # Protein-Ziel -- einfache Spalte ergänzen reicht hier.
+            conn.execute("ALTER TABLE einstellungen ADD COLUMN proteinziel REAL")
     else:
         conn.execute("""
             CREATE TABLE einstellungen (
                 benutzer_id INTEGER PRIMARY KEY,
                 startgewicht REAL,
                 zielgewicht REAL NOT NULL,
-                kalorienziel INTEGER NOT NULL
+                kalorienziel INTEGER NOT NULL,
+                proteinziel REAL
             )
         """)
 
@@ -387,7 +398,7 @@ def registrieren():
         neue_benutzer_id = cursor.lastrowid
 
         conn.execute(
-            "INSERT OR IGNORE INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel) VALUES (?, NULL, ?, ?)",
+            "INSERT OR IGNORE INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel, proteinziel) VALUES (?, NULL, ?, ?, NULL)",
             (neue_benutzer_id, ZIELGEWICHT_STANDARD, KALORIENZIEL_STANDARD),
         )
         conn.executemany(
@@ -473,6 +484,42 @@ def index():
             "uebungen": [u["uebung"] for u in uebungen_namen],
         })
 
+    # --- Wochenrückblick: Durchschnittswerte der letzten 7 Tage ---
+    sieben_tage_start = (date.today() - timedelta(days=6)).isoformat()
+    gewicht_schnitt = conn.execute(
+        "SELECT AVG(wert) AS schnitt FROM gewicht WHERE benutzer_id = ? AND datum >= ?",
+        (benutzer_id, sieben_tage_start),
+    ).fetchone()["schnitt"]
+    kalorien_schnitt = conn.execute(
+        "SELECT AVG(kalorien) AS schnitt FROM ernaehrung WHERE benutzer_id = ? AND datum >= ?",
+        (benutzer_id, sieben_tage_start),
+    ).fetchone()["schnitt"]
+    trainings_diese_woche = conn.execute(
+        "SELECT COUNT(*) AS anzahl FROM trainingseinheit WHERE benutzer_id = ? AND datum >= ?",
+        (benutzer_id, sieben_tage_start),
+    ).fetchone()["anzahl"]
+
+    wochenrueckblick = {
+        "gewicht_schnitt": round(gewicht_schnitt, 1) if gewicht_schnitt is not None else None,
+        "kalorien_schnitt": round(kalorien_schnitt) if kalorien_schnitt is not None else None,
+        "trainings_anzahl": trainings_diese_woche,
+    }
+
+    # --- Trainings-Kalender: letzte 84 Tage (12 Wochen) als Heatmap-Raster ---
+    heatmap_start = date.today() - timedelta(days=83)
+    trainingstage_rohdaten = conn.execute(
+        "SELECT DISTINCT datum FROM trainingseinheit WHERE benutzer_id = ? AND datum >= ?",
+        (benutzer_id, heatmap_start.isoformat()),
+    ).fetchall()
+    trainingstage_menge = {r["datum"] for r in trainingstage_rohdaten}
+    heatmap_tage = []
+    for i in range(84):
+        tag = heatmap_start + timedelta(days=i)
+        heatmap_tage.append({
+            "datum": tag.isoformat(),
+            "trainiert": tag.isoformat() in trainingstage_menge,
+        })
+
     # Startgewicht für die Fortschrittsanzeige: entweder das explizit in den
     # Einstellungen gesetzte, oder ersatzweise der allererste Gewichtseintrag.
     effektives_startgewicht = einstellungen["startgewicht"]
@@ -505,7 +552,10 @@ def index():
         fortschritt_prozent=fortschritt_prozent,
         ernaehrung_heute=ernaehrung_heute,
         kalorienziel=einstellungen["kalorienziel"],
+        proteinziel=einstellungen["proteinziel"],
         letzte_trainings=letzte_trainings,
+        wochenrueckblick=wochenrueckblick,
+        heatmap_tage=heatmap_tage,
     )
 
 
@@ -516,14 +566,16 @@ def einstellungen():
 
     if request.method == "POST":
         startgewicht_roh = request.form.get("startgewicht", "").strip()
+        proteinziel_roh = request.form.get("proteinziel", "").strip()
         conn.execute(
             """UPDATE einstellungen
-               SET startgewicht = ?, zielgewicht = ?, kalorienziel = ?
+               SET startgewicht = ?, zielgewicht = ?, kalorienziel = ?, proteinziel = ?
                WHERE benutzer_id = ?""",
             (
                 float(startgewicht_roh.replace(",", ".")) if startgewicht_roh else None,
                 float(request.form["zielgewicht"].replace(",", ".")),
                 int(request.form["kalorienziel"]),
+                float(proteinziel_roh.replace(",", ".")) if proteinziel_roh else None,
                 benutzer_id,
             ),
         )
@@ -612,7 +664,20 @@ def gewicht_verlauf():
     alle_labels = sorted(labels_menge)
     gewicht_je_datum = {e["datum"]: e["wert"] for e in eintraege_aufsteigend}
 
+    # 7-Tage-gleitender Durchschnitt: für jeden Eintrag der Schnitt aller
+    # Werte der letzten 7 Kalendertage (inkl. diesem Tag). Glättet
+    # Tagesschwankungen (Wasser, Salz, Verdauung) stärker als der Rohwert.
+    durchschnitt_je_datum = {}
+    for eintrag in eintraege_aufsteigend:
+        fenster_start = (date.fromisoformat(eintrag["datum"]) - timedelta(days=6)).isoformat()
+        werte_im_fenster = [
+            e["wert"] for e in eintraege_aufsteigend
+            if fenster_start <= e["datum"] <= eintrag["datum"]
+        ]
+        durchschnitt_je_datum[eintrag["datum"]] = round(sum(werte_im_fenster) / len(werte_im_fenster), 1)
+
     gewicht_werte = [gewicht_je_datum.get(d) for d in alle_labels]
+    durchschnitt_werte = [durchschnitt_je_datum.get(d) for d in alle_labels]
     projektion_werte = [projektion_je_datum.get(d) for d in alle_labels]
 
     return render_template(
@@ -620,6 +685,7 @@ def gewicht_verlauf():
         eintraege=eintraege,
         labels_json=json.dumps(alle_labels),
         gewicht_werte_json=json.dumps(gewicht_werte),
+        durchschnitt_werte_json=json.dumps(durchschnitt_werte),
         projektion_werte_json=json.dumps(projektion_werte),
         zielgewicht=einstellungen_zeile["zielgewicht"],
         projektions_text=projektions_text,
@@ -698,8 +764,28 @@ def ernaehrung_verlauf():
     eintraege = conn.execute(
         "SELECT * FROM ernaehrung WHERE benutzer_id = ? ORDER BY datum DESC", (benutzer_id,)
     ).fetchall()
+
+    sieben_tage_start = (date.today() - timedelta(days=6)).isoformat()
+    wochenschnitt_zeile = conn.execute(
+        """SELECT AVG(kalorien) AS kalorien, AVG(protein) AS protein,
+                  AVG(fett) AS fett, AVG(kohlenhydrate) AS kohlenhydrate,
+                  COUNT(*) AS anzahl
+           FROM ernaehrung WHERE benutzer_id = ? AND datum >= ?""",
+        (benutzer_id, sieben_tage_start),
+    ).fetchone()
     conn.close()
-    return render_template("ernaehrung_verlauf.html", eintraege=eintraege)
+
+    wochenschnitt = None
+    if wochenschnitt_zeile["anzahl"] > 0:
+        wochenschnitt = {
+            "kalorien": round(wochenschnitt_zeile["kalorien"]),
+            "protein": round(wochenschnitt_zeile["protein"], 1) if wochenschnitt_zeile["protein"] is not None else None,
+            "fett": round(wochenschnitt_zeile["fett"], 1) if wochenschnitt_zeile["fett"] is not None else None,
+            "kohlenhydrate": round(wochenschnitt_zeile["kohlenhydrate"], 1) if wochenschnitt_zeile["kohlenhydrate"] is not None else None,
+            "anzahl_tage": wochenschnitt_zeile["anzahl"],
+        }
+
+    return render_template("ernaehrung_verlauf.html", eintraege=eintraege, wochenschnitt=wochenschnitt)
 
 
 @app.route("/ernaehrung/<datum>/loeschen", methods=["POST"])
@@ -741,10 +827,11 @@ def training_session(einheit_id):
     """Übersicht EINES Trainings: alle bisher hinzugefügten Übungen mit
     ihren Sätzen. "AND benutzer_id = ?" stellt sicher, dass niemand ein
     fremdes Training über die ID aufrufen kann."""
+    benutzer_id = aktueller_benutzer_id()
     conn = get_db()
     einheit = conn.execute(
         "SELECT * FROM trainingseinheit WHERE id = ? AND benutzer_id = ?",
-        (einheit_id, aktueller_benutzer_id()),
+        (einheit_id, benutzer_id),
     ).fetchone()
     if einheit is None:
         conn.close()
@@ -755,14 +842,47 @@ def training_session(einheit_id):
            ORDER BY id, satznummer""",
         (einheit_id,),
     ).fetchall()
-    conn.close()
 
     uebungen_gruppiert = {}
+    gesamtvolumen = 0
     for satz in saetze:
         uebungen_gruppiert.setdefault(satz["uebung"], []).append(satz)
+        gesamtvolumen += satz["gewicht"] * satz["wiederholungen"]
+
+    # Volumen (Gewicht x Wiederholungen, aufsummiert) pro Übung -- eine
+    # gängige Kennzahl fürs Trainingsvolumen, unabhängig vom Maximalgewicht.
+    volumen_je_uebung = {
+        name: round(sum(s["gewicht"] * s["wiederholungen"] for s in saetze_liste))
+        for name, saetze_liste in uebungen_gruppiert.items()
+    }
+
+    # Falls noch keine Übung eingetragen ist: Vorlage vom letzten Training
+    # dieses Benutzers anbieten (nur die Übungsnamen, keine Gewichte).
+    vorlage_uebungen = []
+    if not uebungen_gruppiert:
+        letztes_anderes_training = conn.execute(
+            """SELECT id FROM trainingseinheit
+               WHERE benutzer_id = ? AND id != ?
+               ORDER BY erstellt_um DESC LIMIT 1""",
+            (benutzer_id, einheit_id),
+        ).fetchone()
+        if letztes_anderes_training:
+            namen = conn.execute(
+                """SELECT DISTINCT uebung, MIN(id) AS erste_id FROM trainingssatz
+                   WHERE trainingseinheit_id = ? GROUP BY uebung ORDER BY erste_id""",
+                (letztes_anderes_training["id"],),
+            ).fetchall()
+            vorlage_uebungen = [n["uebung"] for n in namen]
+
+    conn.close()
 
     return render_template(
-        "training_session.html", einheit=einheit, uebungen_gruppiert=uebungen_gruppiert
+        "training_session.html",
+        einheit=einheit,
+        uebungen_gruppiert=uebungen_gruppiert,
+        volumen_je_uebung=volumen_je_uebung,
+        gesamtvolumen=round(gesamtvolumen),
+        vorlage_uebungen=vorlage_uebungen,
     )
 
 
@@ -801,30 +921,46 @@ def training_uebung_neu(einheit_id):
         gewichte = request.form.getlist("gewicht[]")
         wiederholungen_liste = request.form.getlist("wiederholungen[]")
 
+        # Bisherige Bestleistung VOR dem Speichern merken, um danach zu
+        # erkennen, ob einer der neuen Sätze einen neuen Rekord bedeutet.
+        bisherige_saetze = conn.execute("""
+            SELECT ts.gewicht, ts.wiederholungen FROM trainingssatz ts
+            JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
+            WHERE ts.uebung = ? AND te.benutzer_id = ?
+        """, (uebung, benutzer_id)).fetchall()
+        bisherige_bestleistung = max(
+            (berechne_e1rm(s["gewicht"], s["wiederholungen"]) for s in bisherige_saetze),
+            default=0,
+        )
+
         conn.execute(
             "INSERT OR IGNORE INTO uebungen (benutzer_id, name) VALUES (?, ?)",
             (benutzer_id, uebung),
         )
 
         satznummer = 0
+        neue_bestleistung = 0
         for gewicht_roh, wdh_roh in zip(gewichte, wiederholungen_liste):
             if not gewicht_roh or not wdh_roh:
                 continue
             satznummer += 1
+            gewicht_wert = float(gewicht_roh.replace(",", "."))
+            wdh_wert = int(wdh_roh)
+            neue_bestleistung = max(neue_bestleistung, berechne_e1rm(gewicht_wert, wdh_wert))
             conn.execute(
                 """INSERT INTO trainingssatz
                    (trainingseinheit_id, uebung, gewicht, wiederholungen, satznummer)
                    VALUES (?, ?, ?, ?, ?)""",
-                (
-                    einheit_id,
-                    uebung,
-                    float(gewicht_roh.replace(",", ".")),
-                    int(wdh_roh),
-                    satznummer,
-                ),
+                (einheit_id, uebung, gewicht_wert, wdh_wert, satznummer),
             )
         conn.commit()
         conn.close()
+
+        # Nur als Rekord feiern, wenn es schon eine Vergleichsgrundlage gab
+        # (sonst wäre JEDE erste Übung automatisch ein "Rekord").
+        if satznummer > 0 and bisherige_bestleistung > 0 and neue_bestleistung > bisherige_bestleistung:
+            flash(f"Neue Bestleistung bei {uebung}: {neue_bestleistung} kg berechnetes Max! 🎉")
+
         return redirect(url_for("training_session", einheit_id=einheit_id))
 
     uebungen_liste = conn.execute(
@@ -837,6 +973,7 @@ def training_uebung_neu(einheit_id):
         "training_uebung_neu.html",
         einheit=einheit,
         uebungen=uebungen_liste,
+        vorausgefuellte_uebung=request.args.get("uebung", ""),
         letzte_leistung_json=json.dumps(letzte_leistung, ensure_ascii=False),
     )
 
@@ -945,6 +1082,61 @@ def verlauf():
         uebungs_daten=uebungs_daten,
         chart_daten_json=json.dumps(chart_daten, ensure_ascii=False),
         chart_labels_json=json.dumps(alle_chart_labels),
+    )
+
+
+@app.route("/export")
+def export_csv():
+    """Exportiert alle Daten des eingeloggten Benutzers als ein ZIP mit
+    drei CSV-Dateien (Gewicht, Ernährung, Trainingssätze) -- z.B. für ein
+    eigenes Backup oder um die Daten in einer anderen App weiterzuverwenden."""
+    import zipfile
+
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+
+    gewicht_zeilen = conn.execute(
+        "SELECT datum, wert FROM gewicht WHERE benutzer_id = ? ORDER BY datum", (benutzer_id,)
+    ).fetchall()
+    ernaehrung_zeilen = conn.execute(
+        "SELECT datum, kalorien, protein, fett, kohlenhydrate FROM ernaehrung WHERE benutzer_id = ? ORDER BY datum",
+        (benutzer_id,),
+    ).fetchall()
+    training_zeilen = conn.execute("""
+        SELECT te.datum, ts.uebung, ts.satznummer, ts.gewicht, ts.wiederholungen
+        FROM trainingssatz ts
+        JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
+        WHERE te.benutzer_id = ?
+        ORDER BY te.datum, ts.uebung, ts.satznummer
+    """, (benutzer_id,)).fetchall()
+    conn.close()
+
+    def csv_text(kopfzeile, zeilen):
+        puffer = io.StringIO()
+        schreiber = csv.writer(puffer)
+        schreiber.writerow(kopfzeile)
+        for zeile in zeilen:
+            schreiber.writerow(list(zeile))
+        return puffer.getvalue()
+
+    zip_puffer = io.BytesIO()
+    with zipfile.ZipFile(zip_puffer, "w", zipfile.ZIP_DEFLATED) as zip_datei:
+        zip_datei.writestr("gewicht.csv", csv_text(["datum", "wert_kg"], gewicht_zeilen))
+        zip_datei.writestr(
+            "ernaehrung.csv",
+            csv_text(["datum", "kalorien", "protein_g", "fett_g", "kohlenhydrate_g"], ernaehrung_zeilen),
+        )
+        zip_datei.writestr(
+            "training.csv",
+            csv_text(["datum", "uebung", "satznummer", "gewicht_kg", "wiederholungen"], training_zeilen),
+        )
+    zip_puffer.seek(0)
+
+    dateiname = f"tracker-export-{date.today().isoformat()}.zip"
+    return Response(
+        zip_puffer.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={dateiname}"},
     )
 
 

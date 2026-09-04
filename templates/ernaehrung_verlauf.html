@@ -4,6 +4,18 @@
 
 <h1>Ernährungsverlauf</h1>
 
+{% if wochenschnitt %}
+<div class="card">
+    <h2>Wochenschnitt (letzte 7 Tage, {{ wochenschnitt["anzahl_tage"] }} Einträge)</h2>
+    <p class="big-number">{{ wochenschnitt["kalorien"] }} kcal</p>
+    <p class="muted">
+        {% if wochenschnitt["protein"] is not none %}Protein: {{ "%g"|format(wochenschnitt["protein"]) }} g{% endif %}
+        {% if wochenschnitt["fett"] is not none %} · Fett: {{ "%g"|format(wochenschnitt["fett"]) }} g{% endif %}
+        {% if wochenschnitt["kohlenhydrate"] is not none %} · Kohlenhydrate: {{ "%g"|format(wochenschnitt["kohlenhydrate"]) }} g{% endif %}
+    </p>
+</div>
+{% endif %}
+
 {% if eintraege %}
     {% for e in eintraege %}
     <div class="card">

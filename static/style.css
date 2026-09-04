@@ -7,6 +7,20 @@
     --border: #e5e7eb;
 }
 
+/* Folgt automatisch der Systemeinstellung des Geräts -- kein manueller
+   Umschalter nötig. Nur die Farbwerte ändern sich, der Rest der CSS-Regeln
+   bleibt unverändert, weil überall mit den obigen Variablen gearbeitet wird. */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --primary: #3b82f6;
+        --bg: #111418;
+        --card-bg: #1c2128;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --border: #2d333b;
+    }
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -245,6 +259,62 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     color: var(--text);
     -webkit-appearance: none;
     appearance: none;
+}
+
+.flash-nachricht {
+    background: #ecfdf5;
+    color: #16a34a;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+}
+
+.vorlage-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.vorlage-chip {
+    display: inline-block;
+    padding: 8px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.9rem;
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.wochenrueckblick-raster {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    text-align: center;
+}
+
+.heatmap-raster {
+    display: grid;
+    grid-template-rows: repeat(7, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: 12px;
+    gap: 3px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.heatmap-tag {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+.heatmap-trainiert {
+    background: var(--primary);
 }
 
 .form button[type="submit"] {

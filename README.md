@@ -2,7 +2,8 @@
 
 Ein selbstgebautes Web-Tool für Körpergewicht, Ernährung (kcal + Makros)
 und Trainingslogs mit Verlaufsdiagrammen, berechneter Maximalleistung
-(e1RM) und einer 3-Monats-Gewichtsprojektion.
+(e1RM), 3-Monats-Gewichtsprojektion, Benutzerkonten für mehrere Personen,
+Wochenrückblick, Trainings-Kalender, CSV-Export und Dunkelmodus.
 
 ## Projektstruktur
 
@@ -168,6 +169,20 @@ Login-Seite -- dort einmalig über "Registrieren" ein Konto anlegen.
   verschlüsseltes Cookie ("Session"), das merkt, wer eingeloggt ist --
   dafür ist der `SECRET_KEY` nötig. Passwörter werden nie im Klartext
   gespeichert, sondern als Hash (`generate_password_hash`).
+- **7-Tage-Durchschnitt / Wochenschnitt**: gleitender bzw. einfacher
+  Mittelwert der letzten 7 Kalendertage, direkt in SQL (`AVG(...)`) bzw.
+  in Python berechnet -- glättet Tagesschwankungen.
+- **Trainingsvolumen**: Gewicht × Wiederholungen, über alle Sätze
+  aufsummiert -- eine gängige Kennzahl fürs Muskelwachstum, unabhängig
+  vom reinen Maximalgewicht.
+- **Trainings-Kalender**: ein CSS-Grid (`grid-auto-flow: column`) mit
+  84 kleinen Kästchen, eins pro Tag der letzten 12 Wochen, eingefärbt
+  wenn an dem Tag trainiert wurde.
+- **Dunkelmodus**: reine CSS-Funktion (`@media (prefers-color-scheme:
+  dark)`), folgt automatisch der Systemeinstellung des Geräts.
+- **CSV-Export**: baut die Daten zur Laufzeit als ZIP mit drei CSV-Dateien
+  (`csv`/`zipfile`/`io` aus der Python-Standardbibliothek) und schickt sie
+  als Download-Antwort zurück -- landet nirgends als Datei auf dem Server.
 
 ## (Alternative) Selbsthosten mit Docker
 

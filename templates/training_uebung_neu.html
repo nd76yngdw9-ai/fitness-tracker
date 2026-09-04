@@ -8,7 +8,8 @@
 <form method="post" class="form" id="uebung-form">
     <label for="uebung">Übung</label>
     <input type="text" id="uebung" name="uebung" list="uebungen-liste"
-           placeholder="Übung wählen oder neue eintippen" required autocomplete="off">
+           placeholder="Übung wählen oder neue eintippen" required autocomplete="off"
+           value="{{ vorausgefuellte_uebung }}">
     <datalist id="uebungen-liste">
         {% for u in uebungen %}
         <option value="{{ u['name'] }}">
@@ -76,6 +77,7 @@
     }
 
     uebungInput.addEventListener("input", letzteLeistungAktualisieren);
+    letzteLeistungAktualisieren(); // falls das Feld schon vorausgefüllt ist
     hinzufuegenBtn.addEventListener("click", satzZeileHinzufuegen);
 
     // Mit 3 leeren Sätzen starten -- deckt den häufigsten Fall ab.
