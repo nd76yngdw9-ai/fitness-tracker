@@ -40,8 +40,13 @@
 
 {% if uebungs_daten %}
 <div class="card chart-card">
-    <canvas id="verlauf-chart"></canvas>
-    <p class="muted" style="margin-top: 10px;">
+    <div class="chart-scroll-wrapper">
+        <div class="chart-inner" id="verlauf-chart-inner">
+            <canvas id="verlauf-chart"></canvas>
+        </div>
+    </div>
+    <p class="muted chart-hinweis">
+        &larr; Zum Scrollen wischen &middot;
         Durchgezogene Linie = berechnete Maximalleistung (e1RM) &middot;
         Punkte = tatsächlich bewegtes Gewicht je Satz
     </p>
@@ -78,24 +83,44 @@
     const chartLabels = {{ chart_labels_json | safe }};
     const farbe = "#2563eb";
 
+    function kurzDatum(isoDatum) {
+        const teile = isoDatum.split("-");
+        return teile[2] + "." + teile[1] + ".";
+    }
+    const kurzeLabels = chartLabels.map(kurzDatum);
+
+    const chartInner = document.getElementById("verlauf-chart-inner");
+    const pixelProPunkt = 42;
+    const mindestbreite = chartInner.parentElement.clientWidth;
+    chartInner.style.width = Math.max(mindestbreite, chartLabels.length * pixelProPunkt) + "px";
+
     const name = Object.keys(chartDaten)[0];
+    // x-Wert muss exakt dem (gekürzten) Kategorie-Label entsprechen, damit
+    // Chart.js den Punkt der richtigen Spalte zuordnet. Mehrere Sätze am
+    // selben Tag bekommen bewusst denselben x-Wert (stapeln sich dort).
+    function alsKategoriePunkte(punkte) {
+        return punkte.map(function (p) {
+            return { x: kurzDatum(p.datum), y: p.wert };
+        });
+    }
+
     const datensaetze = [
         {
             label: name + " (berechnetes Max)",
-            data: chartDaten[name].e1rm.map(function (p) { return { x: p.datum, y: p.wert }; }),
+            data: alsKategoriePunkte(chartDaten[name].e1rm),
             borderColor: farbe,
             backgroundColor: farbe,
             tension: 0.2,
-            pointRadius: 3,
+            pointRadius: 4,
         },
         {
             label: name + " (einzelne Sätze)",
-            data: chartDaten[name].rohdaten.map(function (p) { return { x: p.datum, y: p.wert }; }),
+            data: alsKategoriePunkte(chartDaten[name].rohdaten),
             borderColor: farbe,
             backgroundColor: farbe,
             showLine: false,
             pointStyle: "circle",
-            pointRadius: 4,
+            pointRadius: 5,
             pointBackgroundColor: "transparent",
             pointBorderColor: farbe,
             pointBorderWidth: 1.5,
@@ -104,10 +129,19 @@
 
     new Chart(document.getElementById("verlauf-chart"), {
         type: "line",
-        data: { labels: chartLabels, datasets: datensaetze },
+        data: { labels: kurzeLabels, datasets: datensaetze },
         options: {
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
+                },
+            },
             scales: {
-                x: { type: "category", title: { display: true, text: "Datum" } },
+                x: {
+                    type: "category",
+                    ticks: { autoSkip: false, maxRotation: 60, minRotation: 60, font: { size: 10 } },
+                },
                 y: { title: { display: true, text: "Gewicht (kg)" } },
             },
         },

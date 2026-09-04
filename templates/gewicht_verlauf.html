@@ -11,7 +11,12 @@
 
 {% if eintraege %}
 <div class="card chart-card">
-    <canvas id="gewicht-chart"></canvas>
+    <div class="chart-scroll-wrapper">
+        <div class="chart-inner" id="gewicht-chart-inner">
+            <canvas id="gewicht-chart"></canvas>
+        </div>
+    </div>
+    <p class="muted chart-hinweis">&larr; Zum Scrollen wischen &middot; Legende antippen zum Ein-/Ausblenden</p>
 </div>
 
 {% if projektions_text %}
@@ -66,6 +71,23 @@
     const projektionWerte = {{ projektion_werte_json | safe }};
     const zielgewicht = {{ zielgewicht }};
 
+    // Kurzform "04.09." statt "2026-09-04" -- spart Platz auf dem schmalen
+    // Handy-Bildschirm, ohne Informationen zu verlieren (Jahr steht selten
+    // im Weg, da der Zeitraum meist innerhalb weniger Monate liegt).
+    function kurzDatum(isoDatum) {
+        const teile = isoDatum.split("-");
+        return teile[2] + "." + teile[1] + ".";
+    }
+    const kurzeLabels = alleLabels.map(kurzDatum);
+
+    // Feste Breite pro Datenpunkt statt alles ins Bildschirmbreite zu
+    // quetschen -- macht das Diagramm horizontal scrollbar, aber jeder
+    // Punkt bleibt gut lesbar und antippbar.
+    const chartInner = document.getElementById("gewicht-chart-inner");
+    const pixelProPunkt = 42;
+    const mindestbreite = chartInner.parentElement.clientWidth;
+    chartInner.style.width = Math.max(mindestbreite, alleLabels.length * pixelProPunkt) + "px";
+
     const datensaetze = [
         {
             label: "Gewicht (Tageswert)",
@@ -74,7 +96,7 @@
             backgroundColor: "#cbd5e1",
             spanGaps: true,
             tension: 0.2,
-            pointRadius: 3,
+            pointRadius: 4,
             borderWidth: 1,
         },
         {
@@ -95,6 +117,7 @@
             borderDash: [6, 6],
             spanGaps: true,
             tension: 0.2,
+            hidden: true, // erst antippen, um sie einzublenden -- hält die Erstansicht übersichtlich
         },
         {
             label: "Zielgewicht",
@@ -103,14 +126,24 @@
             backgroundColor: "#16a34a",
             borderDash: [2, 4],
             pointRadius: 0,
+            hidden: true,
         },
     ];
 
     new Chart(document.getElementById("gewicht-chart"), {
         type: "line",
-        data: { labels: alleLabels, datasets: datensaetze },
+        data: { labels: kurzeLabels, datasets: datensaetze },
         options: {
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
+                },
+            },
             scales: {
+                x: {
+                    ticks: { autoSkip: false, maxRotation: 60, minRotation: 60, font: { size: 10 } },
+                },
                 y: { title: { display: true, text: "Gewicht (kg)" } },
             },
         },

@@ -199,6 +199,21 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     margin-top: 16px;
 }
 
+.chart-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.chart-inner {
+    height: 260px;
+}
+
+.chart-hinweis {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    text-align: center;
+}
+
 .add-uebung-button {
     display: block;
     text-align: center;
