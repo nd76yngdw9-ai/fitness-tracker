@@ -107,7 +107,19 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     background: var(--card-bg);
     color: var(--text);
     width: 100%;
+    max-width: 100%;
     min-width: 0;
+    box-sizing: border-box;
+}
+
+/* iOS Safari rendert type="date" manchmal mit einer eigenen inneren
+   Mindestbreite, die "width: 100%" ignoriert und dadurch über den Rand
+   hinausragt. -webkit-appearance:none entfernt die native Kapselung und
+   erzwingt, dass sich das Feld an die normalen Box-Maße hält. */
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
 }
 
 .dashboard-header {
@@ -152,7 +164,9 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
     background: var(--card-bg);
     color: var(--text);
     width: 100%;
+    max-width: 100%;
     min-width: 0;
+    box-sizing: border-box;
 }
 
 .satz-entfernen-btn {
@@ -325,13 +339,14 @@ h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); }
 
 .heatmap-raster {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+    grid-template-columns: repeat(7, 16px);
+    gap: 3px;
 }
 
 .heatmap-tag {
-    aspect-ratio: 1;
-    border-radius: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
     background: var(--border);
 }
 
