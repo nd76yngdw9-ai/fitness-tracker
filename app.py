@@ -744,17 +744,16 @@ def gewicht_verlauf():
 
     # Echte ÄUSSERE Grenzen fürs Zoomen/Verschieben (nicht nur die
     # Startansicht!): ohne das würde die Zoom-Erweiterung die Achse bei
-    # jeder Interaktion einfach unbegrenzt weiterlaufen lassen. Damit
-    # trotzdem nichts abgeschnitten wird, fließen auch die tatsächlichen
-    # Werte (inkl. Projektion) mit ein -- falls sie über den "schönen"
-    # Start/Ziel-Rahmen hinausgehen.
+    # jeder Interaktion einfach unbegrenzt weiterlaufen lassen. Bewusst
+    # OHNE die Projektion -- die extrapoliert 3 Monate in die Zukunft und
+    # würde die Grenze sonst je nach Trend unnötig weit nach oben/unten
+    # ziehen, weit über das hinaus, was praktisch sinnvoll ist.
     y_kandidaten = []
     if y_achse_min is not None:
         y_kandidaten.append(y_achse_min)
     if y_achse_max is not None:
         y_kandidaten.append(y_achse_max)
     y_kandidaten += [e["wert"] for e in eintraege_aufsteigend]
-    y_kandidaten += list(projektion_je_datum.values())
 
     y_limit_min = round(min(y_kandidaten) - 5, 1) if y_kandidaten else None
     y_limit_max = round(max(y_kandidaten) + 5, 1) if y_kandidaten else None

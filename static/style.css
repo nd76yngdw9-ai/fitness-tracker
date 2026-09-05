@@ -236,9 +236,53 @@ input[type="date"] {
 
 .chart-inner-fest {
     height: 260px;
+    position: relative;
     /* "none" statt "pan-y": überlässt JETZT alle Touch-Gesten (auch
        vertikal) dem Zoom-Plugin, statt sie als natives Seiten-Scrollen
        durchzureichen -- nötig, seit auch die Y-Achse zoombar ist. */
+    touch-action: none;
+}
+
+.chart-vollbild-hinweis {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 1.1rem;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.chart-vollbild-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px;
+    padding-top: max(12px, env(safe-area-inset-top));
+}
+
+.chart-vollbild-kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.chart-vollbild-schliessen-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    font-size: 1rem;
+}
+
+.chart-vollbild-inhalt {
+    flex: 1;
+    position: relative;
     touch-action: none;
 }
 

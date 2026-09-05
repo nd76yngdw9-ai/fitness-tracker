@@ -15,13 +15,14 @@
 
 {% if eintraege %}
 <div class="card chart-card">
-    <div class="chart-inner-fest">
+    <div class="chart-inner-fest" id="gewicht-chart-wrapper">
         <canvas id="gewicht-chart"></canvas>
+        <div class="chart-vollbild-hinweis">⛶</div>
     </div>
     <div class="chart-zoom-leiste">
         <p class="muted chart-hinweis">
             Zum Zoomen kneifen/scrollen &middot; zum Verschieben ziehen &middot;
-            Legende antippen zum Ein-/Ausblenden
+            Diagramm antippen für Vollbild
         </p>
         <button type="button" id="zoom-zuruecksetzen-btn" class="secondary-button">Auf heute zurücksetzen</button>
     </div>
@@ -68,6 +69,21 @@
 
 <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
 
+{% if eintraege %}
+<!-- Vollbild-Overlay: komplett leer, bis es geöffnet wird (JS baut den
+     zweiten Chart erst dann, um nicht doppelt Arbeit zu leisten, wenn
+     nie draufgetippt wird). -->
+<div id="chart-vollbild-overlay" class="chart-vollbild-overlay" hidden>
+    <div class="chart-vollbild-kopf">
+        <p class="muted">Zum Verlassen drehen oder X antippen</p>
+        <button type="button" id="chart-vollbild-schliessen" class="chart-vollbild-schliessen-btn">✕</button>
+    </div>
+    <div class="chart-vollbild-inhalt">
+        <canvas id="gewicht-chart-vollbild"></canvas>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -88,72 +104,67 @@
     const anfangsMax = new Date(heute);
     anfangsMax.setDate(anfangsMax.getDate() + fensterTage);
 
-    const datensaetze = [
-        {
-            label: "Gewicht (Tageswert)",
-            data: gewichtPunkte,
-            borderColor: "#cbd5e1",
-            backgroundColor: "#cbd5e1",
-            tension: 0.2,
-            pointRadius: 4,
-            borderWidth: 1,
-        },
-        {
-            label: "7-Tage-Durchschnitt",
-            data: durchschnittPunkte,
-            borderColor: "#2563eb",
-            backgroundColor: "#2563eb",
-            tension: 0.3,
-            borderWidth: 2.5,
-            pointRadius: 0,
-        },
-        {
-            label: "Projektion (3 Monate)",
-            data: projektionPunkte,
-            borderColor: "#94a3b8",
-            backgroundColor: "#94a3b8",
-            borderDash: [6, 6],
-            tension: 0.2,
-            hidden: true, // erst antippen, um sie einzublenden -- hält die Erstansicht übersichtlich
-        },
-        {
-            label: "Zielgewicht",
-            data: zielgewichtPunkte,
-            borderColor: "#16a34a",
-            backgroundColor: "#16a34a",
-            borderDash: [2, 4],
-            pointRadius: 0,
-            hidden: true,
-        },
-    ];
-
-    // Von Python berechnete Standardgrenzen (abhängig von Zu-/Abnehmen).
-    // "none"/null bedeutet: Chart.js soll sie automatisch aus den Werten
-    // ableiten (z.B. wenn Start- und Zielgewicht gleich sind).
+    // Von Python berechnete Grenzen.
     const yAchseMin = {{ y_achse_min if y_achse_min is not none else "undefined" }};
     const yAchseMax = {{ y_achse_max if y_achse_max is not none else "undefined" }};
-
-    // Echte Zoom-/Verschiebe-Grenzen (nicht nur die Startansicht) --
-    // ohne die würde die Achse bei der ersten Interaktion "vergessen",
-    // dass sie mal begrenzt war.
     const yLimitMin = {{ y_limit_min if y_limit_min is not none else "undefined" }};
     const yLimitMax = {{ y_limit_max if y_limit_max is not none else "undefined" }};
     const xLimitMin = new Date("{{ x_limit_min }}");
     const xLimitMax = new Date("{{ x_limit_max }}");
 
-    const gewichtChart = new Chart(document.getElementById("gewicht-chart"), {
-        type: "line",
-        data: { datasets: datensaetze },
-        options: {
+    // Datensätze und Optionen als Funktionen, damit die kleine UND die
+    // Vollbild-Version dieselbe Konfiguration bekommen, ohne Code doppelt
+    // zu pflegen. Jeder Chart braucht sein EIGENES Datensatz-Array-Objekt
+    // (Chart.js verändert es intern), daher eine neue Kopie pro Aufruf.
+    function baueDatensaetze() {
+        return [
+            {
+                label: "Gewicht (Tageswert)",
+                data: gewichtPunkte,
+                borderColor: "#cbd5e1",
+                backgroundColor: "#cbd5e1",
+                tension: 0.2,
+                pointRadius: 4,
+                borderWidth: 1,
+            },
+            {
+                label: "7-Tage-Durchschnitt",
+                data: durchschnittPunkte,
+                borderColor: "#2563eb",
+                backgroundColor: "#2563eb",
+                tension: 0.3,
+                borderWidth: 2.5,
+                pointRadius: 0,
+            },
+            {
+                label: "Projektion (3 Monate)",
+                data: projektionPunkte,
+                borderColor: "#94a3b8",
+                backgroundColor: "#94a3b8",
+                borderDash: [6, 6],
+                tension: 0.2,
+                hidden: true,
+            },
+            {
+                label: "Zielgewicht",
+                data: zielgewichtPunkte,
+                borderColor: "#16a34a",
+                backgroundColor: "#16a34a",
+                borderDash: [2, 4],
+                pointRadius: 0,
+                hidden: true,
+            },
+        ];
+    }
+
+    function baueOptionen() {
+        return {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
                     labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
                 },
                 zoom: {
-                    // "xy" statt nur "x" -- jetzt lässt sich auch die
-                    // Gewichtsskala frei rein-/rauszoomen und verschieben,
-                    // nicht nur die Zeitachse.
                     pan: { enabled: true, mode: "xy" },
                     zoom: {
                         wheel: { enabled: true },
@@ -175,18 +186,48 @@
                     ticks: { font: { size: 10 } },
                 },
                 y: {
-                    title: { display: true, text: "Gewicht (kg)" },
                     min: yAchseMin,
                     max: yAchseMax,
                 },
             },
-        },
-    });
+        };
+    }
 
+    const gewichtChart = new Chart(document.getElementById("gewicht-chart"), {
+        type: "line",
+        data: { datasets: baueDatensaetze() },
+        options: baueOptionen(),
+    });
 
     document.getElementById("zoom-zuruecksetzen-btn").addEventListener("click", function () {
         gewichtChart.resetZoom();
     });
+
+    // --- Vollbild ---
+    const overlay = document.getElementById("chart-vollbild-overlay");
+    let vollbildChart = null;
+
+    function vollbildOeffnen() {
+        overlay.hidden = false;
+        document.body.style.overflow = "hidden"; // Hintergrund nicht mitscrollen
+        if (!vollbildChart) {
+            vollbildChart = new Chart(document.getElementById("gewicht-chart-vollbild"), {
+                type: "line",
+                data: { datasets: baueDatensaetze() },
+                options: baueOptionen(),
+            });
+        } else {
+            vollbildChart.resize();
+        }
+    }
+
+    function vollbildSchliessen() {
+        overlay.hidden = true;
+        document.body.style.overflow = "";
+    }
+
+    document.getElementById("gewicht-chart-wrapper").addEventListener("click", vollbildOeffnen);
+    document.getElementById("chart-vollbild-schliessen").addEventListener("click", vollbildSchliessen);
 </script>
 {% endif %}
 {% endblock %}
