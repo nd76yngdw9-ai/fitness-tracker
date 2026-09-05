@@ -60,13 +60,13 @@
         </div>
         <div>
             <p class="big-number" style="font-size: 1.3rem;">{{ wochenrueckblick["trainings_anzahl"] }}</p>
-            <p class="muted">Trainings</p>
+            <p class="muted">Drenings</p>
         </div>
     </div>
 </div>
 
 <div class="card">
-    <h2>Trainings-Kalender</h2>
+    <h2>Drenings-Kalender</h2>
     <div class="heatmap-raster" id="heatmap-raster">
         {% for tag in heatmap_tage %}
         <div class="heatmap-tag {{ 'heatmap-trainiert' if tag['trainiert'] else '' }}" data-datum="{{ tag['datum'] }}"></div>
@@ -76,7 +76,7 @@
 </div>
 
 <div class="card">
-    <h2>Letzte Trainings</h2>
+    <h2>Letzte Drenings</h2>
     {% if letzte_trainings %}
         <ul class="list">
         {% for training in letzte_trainings %}
@@ -89,7 +89,7 @@
         </ul>
         <a href="{{ url_for('verlauf') }}" class="link">Verlauf &amp; Maximalleistung &rarr;</a>
     {% else %}
-        <p class="muted">Noch kein Training eingetragen.</p>
+        <p class="muted">Noch kein Drening eingetragen.</p>
     {% endif %}
 </div>
 
@@ -119,7 +119,7 @@
         kachel.addEventListener("click", function () {
             const datum = kachel.getAttribute("data-datum");
             const trainiert = kachel.classList.contains("heatmap-trainiert");
-            heatmapAnzeige.textContent = datum + (trainiert ? " – trainiert" : " – kein Training");
+            heatmapAnzeige.textContent = datum + (trainiert ? " – dreniert" : " – kein Drening");
         });
     });
 

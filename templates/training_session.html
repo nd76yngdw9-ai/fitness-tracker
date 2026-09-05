@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Training{% endblock %}
+{% block title %}Drening{% endblock %}
 {% block content %}
 
-<h1>Training – {{ einheit["datum"] }}</h1>
+<h1>Drening – {{ einheit["datum"] }}</h1>
 
 {% if uebungen_gruppiert %}
     <p class="muted">Gesamtvolumen: {{ gesamtvolumen }} kg (Gewicht × Wiederholungen, aufsummiert)</p>
@@ -18,17 +18,17 @@
         <p class="muted">Volumen: {{ volumen_je_uebung[uebung] }} kg</p>
         <form method="post"
               action="{{ url_for('training_uebung_loeschen', einheit_id=einheit['id'], uebung=uebung) }}"
-              onsubmit="return confirm('{{ uebung }} aus diesem Training entfernen?');">
+              onsubmit="return confirm('{{ uebung }} aus diesem Drening entfernen?');">
             <button type="submit" class="danger-link">Übung entfernen</button>
         </form>
     </div>
     {% endfor %}
 {% else %}
-    <p class="muted">Noch keine Übung in diesem Training.</p>
+    <p class="muted">Noch keine Übung in diesem Drening.</p>
 
     {% if vorlage_uebungen %}
     <div class="card">
-        <h2>Vom letzten Training übernehmen</h2>
+        <h2>Vom letzten Drening übernehmen</h2>
         <p class="muted">Übung antippen, um sie mit denselben Namen wie letztes Mal hinzuzufügen:</p>
         <div class="vorlage-chips">
             {% for name in vorlage_uebungen %}
@@ -46,12 +46,12 @@
 </a>
 
 <a href="{{ url_for('index') }}" class="link fertig-link">
-    Training abschließen &amp; zum Dashboard
+    Drening abschließen &amp; zum Dashboard
 </a>
 
 <form method="post" action="{{ url_for('training_loeschen', einheit_id=einheit['id']) }}"
-      onsubmit="return confirm('Das komplette Training mit allen Übungen löschen?');">
-    <button type="submit" class="danger-link">Ganzes Training löschen</button>
+      onsubmit="return confirm('Das komplette Drening mit allen Übungen löschen?');">
+    <button type="submit" class="danger-link">Ganzes Drening löschen</button>
 </form>
 
 {% endblock %}

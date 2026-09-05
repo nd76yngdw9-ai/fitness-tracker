@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Neues Training{% endblock %}
+{% block title %}Neues Drening{% endblock %}
 {% block content %}
 
-<h1>Neues Training starten</h1>
+<h1>Neues Drening starten</h1>
 
 <form method="post" class="form">
     <label for="datum">Datum</label>
     <input type="date" id="datum" name="datum" value="{{ heute }}" required>
 
-    <button type="submit">Training starten</button>
+    <button type="submit">Drening starten</button>
 </form>
 
 <p class="trainings-spruch">{{ spruch }}</p>
