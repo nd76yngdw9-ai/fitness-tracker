@@ -68,7 +68,7 @@
 
 <div class="card">
     <h2>Trainings-Kalender</h2>
-    <div class="heatmap-raster">
+    <div class="heatmap-raster" id="heatmap-raster">
         {% for tag in heatmap_tage %}
         <div class="heatmap-tag {{ 'heatmap-trainiert' if tag['trainiert'] else '' }}" title="{{ tag['datum'] }}"></div>
         {% endfor %}
@@ -94,4 +94,19 @@
     {% endif %}
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Zellengröße so berechnen, dass die 12 Wochen (Spalten) die komplette
+    // Kartenbreite ausfüllen -- kein Platz übrig, kein Scrollen nötig.
+    const heatmapRaster = document.getElementById("heatmap-raster");
+    if (heatmapRaster) {
+        const anzahlWochen = 12;
+        const abstand = 3;
+        const verfuegbareBreite = heatmapRaster.clientWidth;
+        const zellengroesse = (verfuegbareBreite - (anzahlWochen - 1) * abstand) / anzahlWochen;
+        heatmapRaster.style.gridAutoColumns = zellengroesse + "px";
+    }
+</script>
 {% endblock %}
