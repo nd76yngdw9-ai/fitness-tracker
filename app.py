@@ -707,10 +707,40 @@ def gewicht_verlauf():
     heute_iso = date.today().isoformat()
     bereich_start = alle_daten_punkte[0] if alle_daten_punkte else heute_iso
     bereich_ende = alle_daten_punkte[-1] if alle_daten_punkte else heute_iso
+    zielgewicht_wert = einstellungen_zeile["zielgewicht"]
     zielgewicht_punkte = [
-        {"x": bereich_start, "y": einstellungen_zeile["zielgewicht"]},
-        {"x": bereich_ende, "y": einstellungen_zeile["zielgewicht"]},
+        {"x": bereich_start, "y": zielgewicht_wert},
+        {"x": bereich_ende, "y": zielgewicht_wert},
     ]
+
+    # Standard-Y-Achsen-Grenzen abhängig davon, ob zu- oder abgenommen werden
+    # soll -- damit die Skala von Anfang an sinnvoll zum Ziel passt, statt
+    # sich nur stur an den bisherigen Werten zu orientieren:
+    # - Zunehmen (Ziel > Start): unten knapp unters Startgewicht, oben
+    #   Luft übers Ziel.
+    # - Abnehmen (Ziel < Start): oben knapp übers Startgewicht, unten
+    #   Luft unters Ziel.
+    # Das Startgewicht kommt aus den Einstellungen, ersatzweise der erste
+    # eigene Eintrag (gleiche Logik wie beim Dashboard-Fortschrittsbalken).
+    effektives_startgewicht = einstellungen_zeile["startgewicht"]
+    if effektives_startgewicht is None and eintraege_aufsteigend:
+        effektives_startgewicht = eintraege_aufsteigend[0]["wert"]
+
+    y_achse_min = None
+    y_achse_max = None
+    if effektives_startgewicht is not None:
+        if zielgewicht_wert > effektives_startgewicht:
+            # Zunehmen
+            y_achse_min = effektives_startgewicht - 3
+            y_achse_max = zielgewicht_wert + 5
+        elif zielgewicht_wert < effektives_startgewicht:
+            # Abnehmen -- bei normal ausgerichteter Achse verläuft eine
+            # erfolgreiche Abnahme automatisch von oben (Start) nach unten
+            # (Ziel), ganz ohne die Achse umzudrehen.
+            y_achse_min = zielgewicht_wert - 5
+            y_achse_max = effektives_startgewicht + 3
+        # Bei Start == Ziel: keine sinnvolle Richtung, Chart.js berechnet
+        # dann automatisch aus den vorhandenen Werten.
 
     return render_template(
         "gewicht_verlauf.html",
@@ -719,9 +749,11 @@ def gewicht_verlauf():
         durchschnitt_punkte_json=json.dumps(durchschnitt_punkte),
         projektion_punkte_json=json.dumps(projektion_punkte),
         zielgewicht_punkte_json=json.dumps(zielgewicht_punkte),
-        zielgewicht=einstellungen_zeile["zielgewicht"],
+        zielgewicht=zielgewicht_wert,
         projektions_text=projektions_text,
         heute_iso=heute_iso,
+        y_achse_min=y_achse_min,
+        y_achse_max=y_achse_max,
     )
 
 

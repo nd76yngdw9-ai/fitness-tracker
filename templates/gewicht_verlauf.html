@@ -127,6 +127,12 @@
         },
     ];
 
+    // Von Python berechnete Standardgrenzen (abhängig von Zu-/Abnehmen).
+    // "none"/null bedeutet: Chart.js soll sie automatisch aus den Werten
+    // ableiten (z.B. wenn Start- und Zielgewicht gleich sind).
+    const yAchseMin = {{ y_achse_min if y_achse_min is not none else "undefined" }};
+    const yAchseMax = {{ y_achse_max if y_achse_max is not none else "undefined" }};
+
     const gewichtChart = new Chart(document.getElementById("gewicht-chart"), {
         type: "line",
         data: { datasets: datensaetze },
@@ -137,11 +143,14 @@
                     labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
                 },
                 zoom: {
-                    pan: { enabled: true, mode: "x" },
+                    // "xy" statt nur "x" -- jetzt lässt sich auch die
+                    // Gewichtsskala frei rein-/rauszoomen und verschieben,
+                    // nicht nur die Zeitachse.
+                    pan: { enabled: true, mode: "xy" },
                     zoom: {
                         wheel: { enabled: true },
                         pinch: { enabled: true },
-                        mode: "x",
+                        mode: "xy",
                     },
                 },
             },
@@ -153,10 +162,15 @@
                     max: anfangsMax,
                     ticks: { font: { size: 10 } },
                 },
-                y: { title: { display: true, text: "Gewicht (kg)" } },
+                y: {
+                    title: { display: true, text: "Gewicht (kg)" },
+                    min: yAchseMin,
+                    max: yAchseMax,
+                },
             },
         },
     });
+
 
     document.getElementById("zoom-zuruecksetzen-btn").addEventListener("click", function () {
         gewichtChart.resetZoom();
