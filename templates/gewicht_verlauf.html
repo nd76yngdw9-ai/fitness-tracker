@@ -133,6 +133,14 @@
     const yAchseMin = {{ y_achse_min if y_achse_min is not none else "undefined" }};
     const yAchseMax = {{ y_achse_max if y_achse_max is not none else "undefined" }};
 
+    // Echte Zoom-/Verschiebe-Grenzen (nicht nur die Startansicht) --
+    // ohne die würde die Achse bei der ersten Interaktion "vergessen",
+    // dass sie mal begrenzt war.
+    const yLimitMin = {{ y_limit_min if y_limit_min is not none else "undefined" }};
+    const yLimitMax = {{ y_limit_max if y_limit_max is not none else "undefined" }};
+    const xLimitMin = new Date("{{ x_limit_min }}");
+    const xLimitMax = new Date("{{ x_limit_max }}");
+
     const gewichtChart = new Chart(document.getElementById("gewicht-chart"), {
         type: "line",
         data: { datasets: datensaetze },
@@ -151,6 +159,10 @@
                         wheel: { enabled: true },
                         pinch: { enabled: true },
                         mode: "xy",
+                    },
+                    limits: {
+                        x: { min: xLimitMin.getTime(), max: xLimitMax.getTime() },
+                        y: { min: yLimitMin, max: yLimitMax },
                     },
                 },
             },

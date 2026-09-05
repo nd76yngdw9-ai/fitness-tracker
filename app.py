@@ -742,6 +742,26 @@ def gewicht_verlauf():
         # Bei Start == Ziel: keine sinnvolle Richtung, Chart.js berechnet
         # dann automatisch aus den vorhandenen Werten.
 
+    # Echte ÄUSSERE Grenzen fürs Zoomen/Verschieben (nicht nur die
+    # Startansicht!): ohne das würde die Zoom-Erweiterung die Achse bei
+    # jeder Interaktion einfach unbegrenzt weiterlaufen lassen. Damit
+    # trotzdem nichts abgeschnitten wird, fließen auch die tatsächlichen
+    # Werte (inkl. Projektion) mit ein -- falls sie über den "schönen"
+    # Start/Ziel-Rahmen hinausgehen.
+    y_kandidaten = []
+    if y_achse_min is not None:
+        y_kandidaten.append(y_achse_min)
+    if y_achse_max is not None:
+        y_kandidaten.append(y_achse_max)
+    y_kandidaten += [e["wert"] for e in eintraege_aufsteigend]
+    y_kandidaten += list(projektion_je_datum.values())
+
+    y_limit_min = round(min(y_kandidaten) - 5, 1) if y_kandidaten else None
+    y_limit_max = round(max(y_kandidaten) + 5, 1) if y_kandidaten else None
+
+    x_limit_min = (date.fromisoformat(bereich_start) - timedelta(days=14)).isoformat()
+    x_limit_max = (date.fromisoformat(bereich_ende) + timedelta(days=14)).isoformat()
+
     return render_template(
         "gewicht_verlauf.html",
         eintraege=eintraege,
@@ -754,6 +774,10 @@ def gewicht_verlauf():
         heute_iso=heute_iso,
         y_achse_min=y_achse_min,
         y_achse_max=y_achse_max,
+        y_limit_min=y_limit_min,
+        y_limit_max=y_limit_max,
+        x_limit_min=x_limit_min,
+        x_limit_max=x_limit_max,
     )
 
 
