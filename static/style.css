@@ -236,7 +236,10 @@ input[type="date"] {
 
 .chart-inner-fest {
     height: 260px;
-    touch-action: pan-y;
+    /* "none" statt "pan-y": überlässt JETZT alle Touch-Gesten (auch
+       vertikal) dem Zoom-Plugin, statt sie als natives Seiten-Scrollen
+       durchzureichen -- nötig, seit auch die Y-Achse zoombar ist. */
+    touch-action: none;
 }
 
 .chart-zoom-leiste {
