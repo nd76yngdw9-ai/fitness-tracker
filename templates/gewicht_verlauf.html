@@ -3,8 +3,8 @@
 
 {% block extra_head %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.30.0/date-fns.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/3.0.0/chartjs-adapter-date-fns.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-moment/1.0.1/chartjs-adapter-moment.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 {% endblock %}
@@ -148,7 +148,7 @@
             scales: {
                 x: {
                     type: "time",
-                    time: { unit: "day", tooltipFormat: "dd.MM.yyyy", displayFormats: { day: "dd.MM." } },
+                    time: { unit: "day", tooltipFormat: "DD.MM.YYYY", displayFormats: { day: "DD.MM." } },
                     min: anfangsMin,
                     max: anfangsMax,
                     ticks: { font: { size: 10 } },
