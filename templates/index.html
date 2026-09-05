@@ -4,8 +4,7 @@
 
 <div class="dashboard-header">
     <div>
-        <h1>Dein Fortschritt</h1>
-        <p class="muted" style="margin-top: -8px;">{{ benutzername }}</p>
+        <h1 id="begruessung">Hallo {{ benutzername }}</h1>
     </div>
     <a href="{{ url_for('einstellungen') }}" class="settings-link" title="Einstellungen">⚙️</a>
 </div>
@@ -70,10 +69,10 @@
     <h2>Trainings-Kalender</h2>
     <div class="heatmap-raster" id="heatmap-raster">
         {% for tag in heatmap_tage %}
-        <div class="heatmap-tag {{ 'heatmap-trainiert' if tag['trainiert'] else '' }}" title="{{ tag['datum'] }}"></div>
+        <div class="heatmap-tag {{ 'heatmap-trainiert' if tag['trainiert'] else '' }}" data-datum="{{ tag['datum'] }}"></div>
         {% endfor %}
     </div>
-    <p class="muted" style="margin-top: 8px;">Letzte 12 Wochen</p>
+    <p class="muted" id="heatmap-ausgewaehltes-datum" style="margin-top: 8px; min-height: 1.2em;">Letzte 12 Wochen &middot; Kachel antippen fürs Datum</p>
 </div>
 
 <div class="card">
@@ -98,6 +97,32 @@
 
 {% block extra_scripts %}
 <script>
+    // Gruß nach Tageszeit -- bewusst im Browser berechnet (nicht auf dem
+    // Server), damit die tatsächliche Uhrzeit des Benutzers zählt, nicht
+    // die des Servers.
+    const stunde = new Date().getHours();
+    let gruss;
+    if (stunde >= 5 && stunde < 11) {
+        gruss = "Guten Morgen";
+    } else if (stunde >= 11 && stunde < 17) {
+        gruss = "Guten Tag";
+    } else if (stunde >= 17 && stunde < 22) {
+        gruss = "Guten Abend";
+    } else {
+        gruss = "Gute Nacht";
+    }
+    document.getElementById("begruessung").textContent = gruss + " {{ benutzername }}";
+
+    // Heatmap: Datum der angetippten Kachel anzeigen.
+    const heatmapAnzeige = document.getElementById("heatmap-ausgewaehltes-datum");
+    document.querySelectorAll(".heatmap-tag").forEach(function (kachel) {
+        kachel.addEventListener("click", function () {
+            const datum = kachel.getAttribute("data-datum");
+            const trainiert = kachel.classList.contains("heatmap-trainiert");
+            heatmapAnzeige.textContent = datum + (trainiert ? " – trainiert" : " – kein Training");
+        });
+    });
+
     // Zellengröße so berechnen, dass die 12 Wochen (Spalten) die komplette
     // Kartenbreite ausfüllen -- kein Platz übrig, kein Scrollen nötig.
     const heatmapRaster = document.getElementById("heatmap-raster");

@@ -32,6 +32,7 @@ import os
 import json
 import csv
 import io
+import random
 from datetime import date, datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -307,6 +308,24 @@ def _tabelle_um_benutzer_id_ergaenzen(conn, tabellenname, erstellungs_sql):
     spalten = [r["name"] for r in conn.execute(f"PRAGMA table_info({tabellenname})")]
     if "benutzer_id" not in spalten:
         conn.execute(f"ALTER TABLE {tabellenname} ADD COLUMN benutzer_id INTEGER NOT NULL DEFAULT 1")
+
+
+# Sprüche, die auf der "Neues Training starten"-Seite zufällig angezeigt werden.
+TRAININGS_SPRUECHE = [
+    "Wer scheiß Arme hat, sieht scheiße aus.",
+    "Ich kann das nicht essen, ich schaff das nicht – dann spiel Schach!",
+    "Wir machen den Sport nicht, weil wir gesund werden wollen, sondern weil wir Muskeln wollen.",
+    "Schweres Gewicht, hohes Volumen -Muskelwachstum!",
+    "Nur Fleisch macht Fleisch!",
+    "Des bedarfs",
+    "Muss net schmegge, muss wirge",
+    "Doktor Ritsch flickt de Lat wieder zammen",
+    "Gebot 1: De Tschäi Katla dreniert heute",
+    "Masthuhn für Wachstum",
+    "Wer regelkonform trainiert sieht auch regelkonform aus",
+    "Zu schwer gibt's net, nur zu schwach",
+    "Du bist was du frisst. Und wenn du Scheiße frisst, dann siehst du aus wie eine Fotze!",
+]
 
 
 def get_einstellungen(conn, benutzer_id):
@@ -661,9 +680,6 @@ def gewicht_verlauf():
             "ziel_datum": ziel_datum,
         }
 
-    alle_labels = sorted(labels_menge)
-    gewicht_je_datum = {e["datum"]: e["wert"] for e in eintraege_aufsteigend}
-
     # 7-Tage-gleitender Durchschnitt: für jeden Eintrag der Schnitt aller
     # Werte der letzten 7 Kalendertage (inkl. diesem Tag). Glättet
     # Tagesschwankungen (Wasser, Salz, Verdauung) stärker als der Rohwert.
@@ -676,19 +692,36 @@ def gewicht_verlauf():
         ]
         durchschnitt_je_datum[eintrag["datum"]] = round(sum(werte_im_fenster) / len(werte_im_fenster), 1)
 
-    gewicht_werte = [gewicht_je_datum.get(d) for d in alle_labels]
-    durchschnitt_werte = [durchschnitt_je_datum.get(d) for d in alle_labels]
-    projektion_werte = [projektion_je_datum.get(d) for d in alle_labels]
+    gewicht_punkte = [{"x": e["datum"], "y": e["wert"]} for e in eintraege_aufsteigend]
+    durchschnitt_punkte = [
+        {"x": e["datum"], "y": durchschnitt_je_datum[e["datum"]]} for e in eintraege_aufsteigend
+    ]
+    projektion_punkte = [
+        {"x": d, "y": w} for d, w in sorted(projektion_je_datum.items())
+    ]
+
+    # Für die Zielgewicht-Linie und den Standard-Zoombereich: gesamter
+    # Zeitraum von erstem Eintrag bis Ende der Projektion (bzw. bis heute,
+    # falls keine Projektion berechenbar ist).
+    alle_daten_punkte = sorted(labels_menge)
+    heute_iso = date.today().isoformat()
+    bereich_start = alle_daten_punkte[0] if alle_daten_punkte else heute_iso
+    bereich_ende = alle_daten_punkte[-1] if alle_daten_punkte else heute_iso
+    zielgewicht_punkte = [
+        {"x": bereich_start, "y": einstellungen_zeile["zielgewicht"]},
+        {"x": bereich_ende, "y": einstellungen_zeile["zielgewicht"]},
+    ]
 
     return render_template(
         "gewicht_verlauf.html",
         eintraege=eintraege,
-        labels_json=json.dumps(alle_labels),
-        gewicht_werte_json=json.dumps(gewicht_werte),
-        durchschnitt_werte_json=json.dumps(durchschnitt_werte),
-        projektion_werte_json=json.dumps(projektion_werte),
+        gewicht_punkte_json=json.dumps(gewicht_punkte),
+        durchschnitt_punkte_json=json.dumps(durchschnitt_punkte),
+        projektion_punkte_json=json.dumps(projektion_punkte),
+        zielgewicht_punkte_json=json.dumps(zielgewicht_punkte),
         zielgewicht=einstellungen_zeile["zielgewicht"],
         projektions_text=projektions_text,
+        heute_iso=heute_iso,
     )
 
 
@@ -819,7 +852,11 @@ def training_neu():
         conn.close()
         return redirect(url_for("training_session", einheit_id=neue_id))
 
-    return render_template("training_neu.html", heute=date.today().isoformat())
+    return render_template(
+        "training_neu.html",
+        heute=date.today().isoformat(),
+        spruch=random.choice(TRAININGS_SPRUECHE),
+    )
 
 
 @app.route("/training/<int:einheit_id>")

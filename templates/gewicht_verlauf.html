@@ -3,6 +3,10 @@
 
 {% block extra_head %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.30.0/date-fns.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/3.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -11,12 +15,16 @@
 
 {% if eintraege %}
 <div class="card chart-card">
-    <div class="chart-scroll-wrapper">
-        <div class="chart-inner" id="gewicht-chart-inner">
-            <canvas id="gewicht-chart"></canvas>
-        </div>
+    <div class="chart-inner-fest">
+        <canvas id="gewicht-chart"></canvas>
     </div>
-    <p class="muted chart-hinweis">&larr; Zum Scrollen wischen &middot; Legende antippen zum Ein-/Ausblenden</p>
+    <div class="chart-zoom-leiste">
+        <p class="muted chart-hinweis">
+            Zum Zoomen kneifen/scrollen &middot; zum Verschieben ziehen &middot;
+            Legende antippen zum Ein-/Ausblenden
+        </p>
+        <button type="button" id="zoom-zuruecksetzen-btn" class="secondary-button">Auf heute zurücksetzen</button>
+    </div>
 </div>
 
 {% if projektions_text %}
@@ -65,63 +73,52 @@
 {% block extra_scripts %}
 {% if eintraege %}
 <script>
-    const alleLabels = {{ labels_json | safe }};
-    const gewichtWerte = {{ gewicht_werte_json | safe }};
-    const durchschnittWerte = {{ durchschnitt_werte_json | safe }};
-    const projektionWerte = {{ projektion_werte_json | safe }};
-    const zielgewicht = {{ zielgewicht }};
+    const gewichtPunkte = {{ gewicht_punkte_json | safe }};
+    const durchschnittPunkte = {{ durchschnitt_punkte_json | safe }};
+    const projektionPunkte = {{ projektion_punkte_json | safe }};
+    const zielgewichtPunkte = {{ zielgewicht_punkte_json | safe }};
 
-    // Kurzform "04.09." statt "2026-09-04" -- spart Platz auf dem schmalen
-    // Handy-Bildschirm, ohne Informationen zu verlieren (Jahr steht selten
-    // im Weg, da der Zeitraum meist innerhalb weniger Monate liegt).
-    function kurzDatum(isoDatum) {
-        const teile = isoDatum.split("-");
-        return teile[2] + "." + teile[1] + ".";
-    }
-    const kurzeLabels = alleLabels.map(kurzDatum);
-
-    // Feste Breite pro Datenpunkt statt alles ins Bildschirmbreite zu
-    // quetschen -- macht das Diagramm horizontal scrollbar, aber jeder
-    // Punkt bleibt gut lesbar und antippbar.
-    const chartInner = document.getElementById("gewicht-chart-inner");
-    const pixelProPunkt = 42;
-    const mindestbreite = chartInner.parentElement.clientWidth;
-    chartInner.style.width = Math.max(mindestbreite, alleLabels.length * pixelProPunkt) + "px";
+    // Standardansicht: 30 Tage vor und nach heute, damit das aktuelle
+    // Datum beim Öffnen mittig im Diagramm steht. Mit Zoom/Pan lässt sich
+    // danach beliebig weiter rein- oder rauszoomen.
+    const heute = new Date("{{ heute_iso }}");
+    const fensterTage = 30;
+    const anfangsMin = new Date(heute);
+    anfangsMin.setDate(anfangsMin.getDate() - fensterTage);
+    const anfangsMax = new Date(heute);
+    anfangsMax.setDate(anfangsMax.getDate() + fensterTage);
 
     const datensaetze = [
         {
             label: "Gewicht (Tageswert)",
-            data: gewichtWerte,
+            data: gewichtPunkte,
             borderColor: "#cbd5e1",
             backgroundColor: "#cbd5e1",
-            spanGaps: true,
             tension: 0.2,
             pointRadius: 4,
             borderWidth: 1,
         },
         {
             label: "7-Tage-Durchschnitt",
-            data: durchschnittWerte,
+            data: durchschnittPunkte,
             borderColor: "#2563eb",
             backgroundColor: "#2563eb",
-            spanGaps: true,
             tension: 0.3,
             borderWidth: 2.5,
             pointRadius: 0,
         },
         {
             label: "Projektion (3 Monate)",
-            data: projektionWerte,
+            data: projektionPunkte,
             borderColor: "#94a3b8",
             backgroundColor: "#94a3b8",
             borderDash: [6, 6],
-            spanGaps: true,
             tension: 0.2,
             hidden: true, // erst antippen, um sie einzublenden -- hält die Erstansicht übersichtlich
         },
         {
             label: "Zielgewicht",
-            data: alleLabels.map(function () { return zielgewicht; }),
+            data: zielgewichtPunkte,
             borderColor: "#16a34a",
             backgroundColor: "#16a34a",
             borderDash: [2, 4],
@@ -130,23 +127,39 @@
         },
     ];
 
-    new Chart(document.getElementById("gewicht-chart"), {
+    const gewichtChart = new Chart(document.getElementById("gewicht-chart"), {
         type: "line",
-        data: { labels: kurzeLabels, datasets: datensaetze },
+        data: { datasets: datensaetze },
         options: {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
                     labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
                 },
+                zoom: {
+                    pan: { enabled: true, mode: "x" },
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        mode: "x",
+                    },
+                },
             },
             scales: {
                 x: {
-                    ticks: { autoSkip: false, maxRotation: 60, minRotation: 60, font: { size: 10 } },
+                    type: "time",
+                    time: { unit: "day", tooltipFormat: "dd.MM.yyyy", displayFormats: { day: "dd.MM." } },
+                    min: anfangsMin,
+                    max: anfangsMax,
+                    ticks: { font: { size: 10 } },
                 },
                 y: { title: { display: true, text: "Gewicht (kg)" } },
             },
         },
+    });
+
+    document.getElementById("zoom-zuruecksetzen-btn").addEventListener("click", function () {
+        gewichtChart.resetZoom();
     });
 </script>
 {% endif %}

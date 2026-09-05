@@ -234,6 +234,29 @@ input[type="date"] {
     height: 260px;
 }
 
+.chart-inner-fest {
+    height: 260px;
+    touch-action: pan-y;
+}
+
+.chart-zoom-leiste {
+    margin-top: 10px;
+}
+
+.chart-zoom-leiste .secondary-button {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.trainings-spruch {
+    margin-top: 28px;
+    text-align: center;
+    font-style: italic;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
 .chart-hinweis {
     margin-top: 10px;
     font-size: 0.78rem;
