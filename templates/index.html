@@ -31,15 +31,15 @@
     {% if ernaehrung_heute %}
         <p class="big-number">{{ ernaehrung_heute["kalorien"] }} / {{ kalorienziel }} kcal</p>
         <p class="muted">
-            {% if ernaehrung_heute["protein"] is not none %}Protein: {{ ernaehrung_heute["protein"] }} g{% endif %}
-            {% if ernaehrung_heute["fett"] is not none %} · Fett: {{ ernaehrung_heute["fett"] }} g{% endif %}
-            {% if ernaehrung_heute["kohlenhydrate"] is not none %} · Kohlenhydrate: {{ ernaehrung_heute["kohlenhydrate"] }} g{% endif %}
+            {% if ernaehrung_heute["protein"] is not none %}Protein: {{ "%g"|format(ernaehrung_heute["protein"]) }} g{% endif %}
+            {% if ernaehrung_heute["fett"] is not none %} · Fett: {{ "%g"|format(ernaehrung_heute["fett"]) }} g{% endif %}
+            {% if ernaehrung_heute["kohlenhydrate"] is not none %} · Kohlenhydrate: {{ "%g"|format(ernaehrung_heute["kohlenhydrate"]) }} g{% endif %}
         </p>
         {% if proteinziel and ernaehrung_heute["protein"] is not none %}
         <div class="progress-bar">
             <div class="progress-fill" style="width: {{ [100, (ernaehrung_heute['protein'] / proteinziel * 100) | round(1)] | min }}%;"></div>
         </div>
-        <p class="muted">Protein-Ziel: {{ ernaehrung_heute["protein"] }} / {{ proteinziel }} g</p>
+        <p class="muted">Protein-Ziel: {{ "%g"|format(ernaehrung_heute["protein"]) }} / {{ "%g"|format(proteinziel) }} g</p>
         {% endif %}
     {% else %}
         <p class="muted">Heute noch nichts eingetragen.</p>

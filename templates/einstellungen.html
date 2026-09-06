@@ -38,22 +38,50 @@
     <button type="button" id="api-token-kopieren-btn" class="secondary-button">Token kopieren</button>
 
     <details style="margin-top: 14px;">
-        <summary class="muted" style="cursor: pointer;">Kurzbefehl einrichten (Anleitung)</summary>
+        <summary class="muted" style="cursor: pointer;">Kurzbefehl "Gewicht" einrichten (Anleitung)</summary>
         <ol class="anleitung-liste">
-            <li>App "Kurzbefehle" öffnen → "+" → "Aktion hinzufügen"</li>
-            <li>Nach "Inhalte von URL abrufen" suchen und hinzufügen</li>
-            <li>URL eintragen:
-                <code>https://{{ request.host }}{{ url_for('api_gewicht') }}?token={{ api_token }}&wert=[Eingabe]</code>
-                (für Ernährung: <code>{{ url_for('api_ernaehrung') }}</code> mit
-                <code>&kalorien=[Eingabe]</code>)
+            <li>App "Kurzbefehle" öffnen → "+" → "Aktion hinzufügen" → "Mitteilung anzeigen"
+                suchen und hinzufügen → Text eintragen, z.B. "Wie viel wiegst du?"</li>
+            <li>Danach "Diktat" hinzufügen → aufklappen → "Diktat beenden mit" auf
+                "Bei Sprechpause" stellen (dann musst du am Ende nichts antippen)</li>
+            <li>Danach "Inhalte von URL abrufen" hinzufügen. Ins URL-Feld eintragen:
+                <code>https://{{ request.host }}{{ url_for('api_gewicht') }}?token={{ api_token }}&wert=</code>
+            </li>
+            <li>Direkt hinter <code>wert=</code> antippen → in der Leiste über der Tastatur
+                "Diktatergebnis" auswählen (fügt einen blauen Chip ein, keinen echten Text)</li>
+            <li>In derselben Aktion aufklappen → "Methode" von GET auf "POST" stellen</li>
+            <li>Oben auf den Kurzbefehl-Namen/das Icon tippen → Namen vergeben
+                (z.B. "Gewicht eintragen") → dort die Siri-Phrase aufnehmen</li>
+        </ol>
+        <p class="muted">Nutzung: "Hey Siri, Gewicht eintragen" → Meldung erscheint kurz → Zahl sprechen → fertig.</p>
+    </details>
+
+    <details style="margin-top: 10px;">
+        <summary class="muted" style="cursor: pointer;">Kurzbefehl "Ernährung" einrichten (Anleitung)</summary>
+        <p class="muted">
+            Vier Werte statt einem: Kalorien (Pflicht), Protein, Fett, Kohlenhydrate
+            (alle drei optional -- bei Sprechpause ohne etwas zu sagen bleibt das Feld leer).
+        </p>
+        <ol class="anleitung-liste">
+            <li>Für <strong>jeden</strong> der vier Werte dieses Dreier-Paket hinzufügen:
+                "Mitteilung anzeigen" (z.B. "Wie viele Kalorien?") → "Diktat" ("Diktat beenden
+                mit" → "Bei Sprechpause") → "Variable festlegen" (neue Variable, z.B. "Kalorien",
+                Wert = Diktatergebnis). Am Ende hast du 12 Aktionen (3 × 4, für Kalorien,
+                Protein, Fett, Kohlenhydrate).</li>
+            <li>Danach "Inhalte von URL abrufen" hinzufügen. Ins URL-Feld eintragen (die
+                Variablen an den <code>=</code>-Stellen jeweils einfügen statt Text zu tippen):
+                <code>https://{{ request.host }}{{ url_for('api_ernaehrung') }}?token={{ api_token }}&kalorien=&protein=&fett=&kohlenhydrate=</code>
             </li>
             <li>Methode auf "POST" stellen</li>
-            <li>Davor eine Aktion "Text eingeben" oder "Diktat" hinzufügen, deren
-                Ergebnis du bei "[Eingabe]" in der URL einfügst</li>
-            <li>Kurzbefehl einen Namen geben (z.B. "Gewicht eintragen") und
-                "Mit Siri hinzufügen" aktivieren</li>
+            <li>Namen vergeben (z.B. "Ernährung eintragen") und Siri-Phrase aufnehmen</li>
         </ol>
+        <p class="muted">Nutzung: "Hey Siri, Ernährung eintragen" → vier kurze Meldungen + Diktate nacheinander → fertig.</p>
     </details>
+
+    <p class="muted" style="margin-top: 10px; font-size: 0.85rem;">
+        Falls eine Mitteilung nicht erscheint: Einstellungen → Mitteilungen → Kurzbefehle →
+        "Mitteilungen erlauben" aktivieren.
+    </p>
 
     <form method="post" action="{{ url_for('api_token_neu') }}"
           onsubmit="return confirm('Neuen Schlüssel erzeugen? Der alte funktioniert danach nicht mehr, bestehende Kurzbefehle müsstest du dann aktualisieren.');"
