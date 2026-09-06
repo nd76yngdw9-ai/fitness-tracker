@@ -22,7 +22,7 @@
     <div class="chart-zoom-leiste">
         <p class="muted chart-hinweis">
             Zum Zoomen kneifen/scrollen &middot; zum Verschieben ziehen &middot;
-            Diagramm antippen für Vollbild
+            Diagramm antippen für Querformat-Vollbild
         </p>
         <button type="button" id="zoom-zuruecksetzen-btn" class="secondary-button">Auf heute zurücksetzen</button>
     </div>
@@ -75,11 +75,13 @@
      nie draufgetippt wird). -->
 <div id="chart-vollbild-overlay" class="chart-vollbild-overlay" hidden>
     <div class="chart-vollbild-kopf">
-        <p class="muted">Zum Verlassen drehen oder X antippen</p>
+        <p class="muted">Querformat-Ansicht &middot; X zum Schließen</p>
         <button type="button" id="chart-vollbild-schliessen" class="chart-vollbild-schliessen-btn">✕</button>
     </div>
-    <div class="chart-vollbild-inhalt">
-        <canvas id="gewicht-chart-vollbild"></canvas>
+    <div class="chart-vollbild-inhalt" id="chart-vollbild-inhalt">
+        <div class="chart-vollbild-gedreht" id="chart-vollbild-gedreht">
+            <canvas id="gewicht-chart-vollbild"></canvas>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -203,13 +205,31 @@
         gewichtChart.resetZoom();
     });
 
-    // --- Vollbild ---
+    // --- Vollbild (optisch im Querformat, ohne dass das Handy gedreht
+    //     werden muss: der Innenbereich wird per CSS-transform um 90°
+    //     gedreht, seine Maße dafür vorher vertauscht -- verfügbare Höhe
+    //     wird zur Breite, verfügbare Breite wird zur Höhe). ---
     const overlay = document.getElementById("chart-vollbild-overlay");
+    const inhalt = document.getElementById("chart-vollbild-inhalt");
+    const gedreht = document.getElementById("chart-vollbild-gedreht");
     let vollbildChart = null;
+
+    function vollbildGroesseAnpassen() {
+        const verfuegbareBreite = inhalt.clientWidth;
+        const verfuegbareHoehe = inhalt.clientHeight;
+        // Nach der 90°-Drehung wird die Höhe des Containers optisch zu
+        // seiner Breite (und umgekehrt) -- deshalb hier vertauscht.
+        gedreht.style.width = verfuegbareHoehe + "px";
+        gedreht.style.height = verfuegbareBreite + "px";
+        if (vollbildChart) {
+            vollbildChart.resize();
+        }
+    }
 
     function vollbildOeffnen() {
         overlay.hidden = false;
         document.body.style.overflow = "hidden"; // Hintergrund nicht mitscrollen
+        vollbildGroesseAnpassen();
         if (!vollbildChart) {
             vollbildChart = new Chart(document.getElementById("gewicht-chart-vollbild"), {
                 type: "line",
@@ -228,6 +248,11 @@
 
     document.getElementById("gewicht-chart-wrapper").addEventListener("click", vollbildOeffnen);
     document.getElementById("chart-vollbild-schliessen").addEventListener("click", vollbildSchliessen);
+    window.addEventListener("resize", function () {
+        if (!overlay.hidden) {
+            vollbildGroesseAnpassen();
+        }
+    });
 </script>
 {% endif %}
 {% endblock %}
