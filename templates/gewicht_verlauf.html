@@ -22,7 +22,7 @@
     <div class="chart-zoom-leiste">
         <p class="muted chart-hinweis">
             Zum Zoomen kneifen/scrollen &middot; zum Verschieben ziehen &middot;
-            Diagramm antippen für Vollbild
+            Diagramm doppelt antippen für Vollbild
         </p>
         <button type="button" id="zoom-zuruecksetzen-btn" class="secondary-button">Auf heute zurücksetzen</button>
     </div>
@@ -276,7 +276,7 @@
         document.body.style.overflow = "";
     }
 
-    document.getElementById("gewicht-chart-wrapper").addEventListener("click", vollbildOeffnen);
+    document.getElementById("gewicht-chart-wrapper").addEventListener("dblclick", vollbildOeffnen);
     document.getElementById("chart-vollbild-schliessen").addEventListener("click", vollbildSchliessen);
     window.addEventListener("resize", function () {
         if (!overlay.hidden) {
