@@ -321,7 +321,7 @@ input[type="date"] {
     right: 16px;
     z-index: 10;
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
 }
 
