@@ -33,6 +33,7 @@ import json
 import csv
 import io
 import random
+import secrets
 from datetime import date, datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -79,7 +80,7 @@ REGISTRIERUNGS_CODE = os.environ.get("REGISTRIERUNGS_CODE")
 # Seiten, die OHNE Login erreichbar sein müssen (sonst gäbe es eine
 # Endlos-Weiterleitung: nicht eingeloggt -> zu /login geschickt -> /login
 # selbst verlangt auch einen Login -> ...).
-OEFFENTLICHE_ENDPUNKTE = {"login", "registrieren", "static"}
+OEFFENTLICHE_ENDPUNKTE = {"login", "registrieren", "static", "api_gewicht", "api_ernaehrung"}
 
 
 def get_db():
@@ -210,7 +211,7 @@ def init_db():
         """)
 
     # --- einstellungen: benutzer_id als Primärschlüssel statt fixer id=1,
-    #     PLUS neue Spalte "startgewicht" -> komplett neu aufbauen ---
+    #     PLUS neue Spalten "startgewicht"/"proteinziel"/"api_token" ---
     einstellungen_existiert = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='einstellungen'"
     ).fetchone()
@@ -224,20 +225,24 @@ def init_db():
                     startgewicht REAL,
                     zielgewicht REAL NOT NULL,
                     kalorienziel INTEGER NOT NULL,
-                    proteinziel REAL
+                    proteinziel REAL,
+                    api_token TEXT
                 )
             """)
             alte_zeile = conn.execute("SELECT * FROM einstellungen_alt WHERE id = 1").fetchone()
             if alte_zeile:
                 conn.execute(
-                    "INSERT INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel, proteinziel) VALUES (1, NULL, ?, ?, NULL)",
+                    "INSERT INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel, proteinziel, api_token) VALUES (1, NULL, ?, ?, NULL, NULL)",
                     (alte_zeile["zielgewicht"], alte_zeile["kalorienziel"]),
                 )
             conn.execute("DROP TABLE einstellungen_alt")
-        elif "proteinziel" not in spalten:
-            # Zwischen-Version: hatte schon benutzer_id, aber noch kein
-            # Protein-Ziel -- einfache Spalte ergänzen reicht hier.
-            conn.execute("ALTER TABLE einstellungen ADD COLUMN proteinziel REAL")
+        else:
+            if "proteinziel" not in spalten:
+                # Zwischen-Version: hatte schon benutzer_id, aber noch kein
+                # Protein-Ziel -- einfache Spalte ergänzen reicht hier.
+                conn.execute("ALTER TABLE einstellungen ADD COLUMN proteinziel REAL")
+            if "api_token" not in spalten:
+                conn.execute("ALTER TABLE einstellungen ADD COLUMN api_token TEXT")
     else:
         conn.execute("""
             CREATE TABLE einstellungen (
@@ -245,7 +250,8 @@ def init_db():
                 startgewicht REAL,
                 zielgewicht REAL NOT NULL,
                 kalorienziel INTEGER NOT NULL,
-                proteinziel REAL
+                proteinziel REAL,
+                api_token TEXT
             )
         """)
 
@@ -335,6 +341,34 @@ def get_einstellungen(conn, benutzer_id):
     ).fetchone()
 
 
+def hole_oder_erzeuge_api_token(conn, benutzer_id):
+    """Gibt den API-Token des Benutzers zurück -- erzeugt bei Bedarf einen
+    neuen (betrifft Konten, die vor Einführung dieses Features registriert
+    wurden und deshalb noch keinen haben)."""
+    zeile = conn.execute(
+        "SELECT api_token FROM einstellungen WHERE benutzer_id = ?", (benutzer_id,)
+    ).fetchone()
+    if zeile and zeile["api_token"]:
+        return zeile["api_token"]
+    neuer_token = secrets.token_urlsafe(24)
+    conn.execute(
+        "UPDATE einstellungen SET api_token = ? WHERE benutzer_id = ?",
+        (neuer_token, benutzer_id),
+    )
+    conn.commit()
+    return neuer_token
+
+
+def benutzer_id_fuer_token(conn, token):
+    """Findet die benutzer_id zu einem API-Token, oder None wenn ungültig."""
+    if not token:
+        return None
+    zeile = conn.execute(
+        "SELECT benutzer_id FROM einstellungen WHERE api_token = ?", (token,)
+    ).fetchone()
+    return zeile["benutzer_id"] if zeile else None
+
+
 def hole_letzte_leistung(conn, benutzer_id):
     """Baut ein Dictionary {Übungsname: {datum, saetze}} mit der jeweils
     letzten (jüngsten) Trainingseinheit DIESES Benutzers, in der die Übung
@@ -417,8 +451,8 @@ def registrieren():
         neue_benutzer_id = cursor.lastrowid
 
         conn.execute(
-            "INSERT OR IGNORE INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel, proteinziel) VALUES (?, NULL, ?, ?, NULL)",
-            (neue_benutzer_id, ZIELGEWICHT_STANDARD, KALORIENZIEL_STANDARD),
+            "INSERT OR IGNORE INTO einstellungen (benutzer_id, startgewicht, zielgewicht, kalorienziel, proteinziel, api_token) VALUES (?, NULL, ?, ?, NULL, ?)",
+            (neue_benutzer_id, ZIELGEWICHT_STANDARD, KALORIENZIEL_STANDARD, secrets.token_urlsafe(24)),
         )
         conn.executemany(
             "INSERT OR IGNORE INTO uebungen (benutzer_id, name) VALUES (?, ?)",
@@ -603,10 +637,29 @@ def einstellungen():
         return redirect(url_for("index"))
 
     aktuelle_werte = get_einstellungen(conn, benutzer_id)
+    api_token = hole_oder_erzeuge_api_token(conn, benutzer_id)
     conn.close()
     return render_template(
-        "einstellungen.html", werte=aktuelle_werte, benutzername=session.get("benutzername")
+        "einstellungen.html",
+        werte=aktuelle_werte,
+        benutzername=session.get("benutzername"),
+        api_token=api_token,
     )
+
+
+@app.route("/einstellungen/api-token/neu", methods=["POST"])
+def api_token_neu():
+    """Erzeugt einen neuen API-Token und macht damit den alten ungültig --
+    z.B. falls er versehentlich geteilt wurde."""
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+    conn.execute(
+        "UPDATE einstellungen SET api_token = ? WHERE benutzer_id = ?",
+        (secrets.token_urlsafe(24), benutzer_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("einstellungen"))
 
 
 # ---------------------------------------------------------------------
@@ -1230,6 +1283,118 @@ def export_csv():
         mimetype="application/zip",
         headers={"Content-Disposition": f"attachment; filename={dateiname}"},
     )
+
+
+# ---------------------------------------------------------------------
+# API für externe Automatisierung (z.B. iPhone-Kurzbefehle/Siri) --
+# authentifiziert über den persönlichen API-Token statt über die normale
+# Login-Session, weil ein Kurzbefehl kein eingeloggter Browser ist.
+# ---------------------------------------------------------------------
+
+def _api_token_aus_anfrage():
+    """Liest den Token aus (in dieser Reihenfolge): Query-Parameter,
+    Formular-Feld, Authorization-Header ("Bearer ..."), oder JSON-Body --
+    je nachdem, wie die aufrufende Automatisierung ihn am einfachsten
+    mitschicken kann."""
+    token = request.args.get("token") or request.form.get("token")
+    if token:
+        return token
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[len("Bearer "):]
+    daten = request.get_json(silent=True) or {}
+    return daten.get("token")
+
+
+def _api_eingabedaten():
+    """Liest die eigentlichen Werte sowohl aus einem JSON-Body als auch aus
+    Formular- oder Query-Feldern -- iPhone-Kurzbefehle schicken je nach
+    Konfiguration mal das eine, mal das andere."""
+    ergebnis = dict(request.get_json(silent=True) or {})
+    for schluessel in request.form:
+        ergebnis.setdefault(schluessel, request.form[schluessel])
+    for schluessel in request.args:
+        ergebnis.setdefault(schluessel, request.args[schluessel])
+    return ergebnis
+
+
+def _optionale_zahl(daten, feld):
+    wert = daten.get(feld)
+    if wert in (None, ""):
+        return None
+    return float(str(wert).replace(",", "."))
+
+
+@app.route("/api/gewicht", methods=["POST"])
+def api_gewicht():
+    """Trägt ein Gewicht ein. Erwartet mindestens 'wert' (kg), optional
+    'datum' (YYYY-MM-DD, Standard: heute). Authentifizierung per Token."""
+    conn = get_db()
+    benutzer_id = benutzer_id_fuer_token(conn, _api_token_aus_anfrage())
+    if benutzer_id is None:
+        conn.close()
+        return {"erfolg": False, "fehler": "Ungültiger oder fehlender Token"}, 401
+
+    daten = _api_eingabedaten()
+    if "wert" not in daten:
+        conn.close()
+        return {"erfolg": False, "fehler": "Feld 'wert' fehlt"}, 400
+    try:
+        wert = float(str(daten["wert"]).replace(",", "."))
+    except ValueError:
+        conn.close()
+        return {"erfolg": False, "fehler": "'wert' ist keine gültige Zahl"}, 400
+
+    datum = daten.get("datum") or date.today().isoformat()
+    conn.execute(
+        "INSERT INTO gewicht (benutzer_id, datum, wert) VALUES (?, ?, ?)",
+        (benutzer_id, datum, wert),
+    )
+    conn.commit()
+    conn.close()
+    return {"erfolg": True, "datum": datum, "wert": wert}
+
+
+@app.route("/api/ernaehrung", methods=["POST"])
+def api_ernaehrung():
+    """Trägt Ernährung für einen Tag ein (überschreibt einen bestehenden
+    Eintrag für denselben Tag, genau wie das normale Formular). Erwartet
+    mindestens 'kalorien', optional 'protein'/'fett'/'kohlenhydrate'/'datum'."""
+    conn = get_db()
+    benutzer_id = benutzer_id_fuer_token(conn, _api_token_aus_anfrage())
+    if benutzer_id is None:
+        conn.close()
+        return {"erfolg": False, "fehler": "Ungültiger oder fehlender Token"}, 401
+
+    daten = _api_eingabedaten()
+    if "kalorien" not in daten:
+        conn.close()
+        return {"erfolg": False, "fehler": "Feld 'kalorien' fehlt"}, 400
+    try:
+        kalorien = int(float(str(daten["kalorien"]).replace(",", ".")))
+    except ValueError:
+        conn.close()
+        return {"erfolg": False, "fehler": "'kalorien' ist keine gültige Zahl"}, 400
+
+    datum = daten.get("datum") or date.today().isoformat()
+    conn.execute(
+        """INSERT INTO ernaehrung (benutzer_id, datum, kalorien, protein, fett, kohlenhydrate)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(benutzer_id, datum) DO UPDATE SET
+               kalorien = excluded.kalorien,
+               protein = excluded.protein,
+               fett = excluded.fett,
+               kohlenhydrate = excluded.kohlenhydrate""",
+        (
+            benutzer_id, datum, kalorien,
+            _optionale_zahl(daten, "protein"),
+            _optionale_zahl(daten, "fett"),
+            _optionale_zahl(daten, "kohlenhydrate"),
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return {"erfolg": True, "datum": datum, "kalorien": kalorien}
 
 
 # WICHTIG: init_db() läuft hier auf Modul-Ebene (nicht nur im

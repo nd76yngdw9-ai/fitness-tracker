@@ -25,11 +25,16 @@
 
 html {
     overflow-x: hidden;
+    /* Unterbindet das "Wegziehen mit Zurückfedern" (Bounce/Rubber-Band),
+       wenn die Seite gar nicht mehr Inhalt hat, als auf den Bildschirm
+       passt -- betrifft z.B. den Gewicht-Tab, der oft kurz ist. */
+    overscroll-behavior: none;
 }
 
 body {
     margin: 0;
     overflow-x: hidden;
+    overscroll-behavior: none;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
@@ -561,4 +566,31 @@ input[type="date"] {
 .nav-item span {
     font-size: 0.7rem;
     color: var(--muted);
+}
+
+.api-token-wert {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    word-break: break-all;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 10px 0;
+}
+
+.anleitung-liste {
+    margin-top: 10px;
+    padding-left: 20px;
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.6;
+}
+
+.anleitung-liste code {
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.82rem;
+    word-break: break-all;
 }

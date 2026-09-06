@@ -27,6 +27,41 @@
     <button type="submit">Speichern</button>
 </form>
 
+<div class="card" style="margin-top: 20px;">
+    <h2>Automatisiert eintragen (iPhone-Kurzbefehle/Siri)</h2>
+    <p class="muted">
+        Mit diesem persönlichen Schlüssel kannst du dir einen iPhone-Kurzbefehl
+        bauen, der per Siri dein Gewicht oder deine Ernährung einträgt, ganz
+        ohne die App zu öffnen. Der Schlüssel ist geheim -- nicht teilen.
+    </p>
+    <p class="api-token-wert" id="api-token-wert">{{ api_token }}</p>
+    <button type="button" id="api-token-kopieren-btn" class="secondary-button">Token kopieren</button>
+
+    <details style="margin-top: 14px;">
+        <summary class="muted" style="cursor: pointer;">Kurzbefehl einrichten (Anleitung)</summary>
+        <ol class="anleitung-liste">
+            <li>App "Kurzbefehle" öffnen → "+" → "Aktion hinzufügen"</li>
+            <li>Nach "Inhalte von URL abrufen" suchen und hinzufügen</li>
+            <li>URL eintragen:
+                <code>https://{{ request.host }}{{ url_for('api_gewicht') }}?token={{ api_token }}&wert=[Eingabe]</code>
+                (für Ernährung: <code>{{ url_for('api_ernaehrung') }}</code> mit
+                <code>&kalorien=[Eingabe]</code>)
+            </li>
+            <li>Methode auf "POST" stellen</li>
+            <li>Davor eine Aktion "Text eingeben" oder "Diktat" hinzufügen, deren
+                Ergebnis du bei "[Eingabe]" in der URL einfügst</li>
+            <li>Kurzbefehl einen Namen geben (z.B. "Gewicht eintragen") und
+                "Mit Siri hinzufügen" aktivieren</li>
+        </ol>
+    </details>
+
+    <form method="post" action="{{ url_for('api_token_neu') }}"
+          onsubmit="return confirm('Neuen Schlüssel erzeugen? Der alte funktioniert danach nicht mehr, bestehende Kurzbefehle müsstest du dann aktualisieren.');"
+          style="margin-top: 14px;">
+        <button type="submit" class="danger-link">Neuen Schlüssel erzeugen</button>
+    </form>
+</div>
+
 <p class="muted" style="margin-top: 16px;">
     <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
 </p>
@@ -38,5 +73,17 @@
 <form method="post" action="{{ url_for('logout') }}" style="margin-top: 20px;">
     <button type="submit" class="danger-link">Abmelden</button>
 </form>
+
+<script>
+    document.getElementById("api-token-kopieren-btn").addEventListener("click", function () {
+        const token = document.getElementById("api-token-wert").textContent;
+        navigator.clipboard.writeText(token).then(function () {
+            const btn = document.getElementById("api-token-kopieren-btn");
+            const alterText = btn.textContent;
+            btn.textContent = "Kopiert!";
+            setTimeout(function () { btn.textContent = alterText; }, 1500);
+        });
+    });
+</script>
 
 {% endblock %}

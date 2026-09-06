@@ -20,6 +20,28 @@ tracker/
 `tracker.db` (die Datenbank) wird beim ersten Start automatisch angelegt
 und liegt danach im selben Ordner wie `app.py`.
 
+## Automatisiert eintragen (API + iPhone-Kurzbefehle)
+
+Unter "Einstellungen" findest du einen persönlichen API-Token. Damit lässt
+sich per HTTP-POST Gewicht oder Ernährung eintragen, ohne die App zu
+öffnen -- z.B. über einen iPhone-Kurzbefehl, den du per Siri auslöst. Die
+Anleitung dafür steht direkt auf der Einstellungen-Seite.
+
+Kurzform der Endpunkte:
+
+```
+POST /api/gewicht
+  Felder: wert (Pflicht), datum (optional, Standard: heute)
+
+POST /api/ernaehrung
+  Felder: kalorien (Pflicht), protein/fett/kohlenhydrate (optional),
+          datum (optional, Standard: heute)
+```
+
+Der Token kann als Query-Parameter (`?token=...`), Formularfeld, im
+JSON-Body, oder als `Authorization: Bearer ...`-Header mitgeschickt werden
+-- je nachdem, was für deine Automatisierung am einfachsten ist.
+
 ## Hosting auf PythonAnywhere (empfohlen, kostenlos, ohne eigenes Netzwerk offenzulegen)
 
 PythonAnywhere hostet die App dauerhaft unter einer eigenen
