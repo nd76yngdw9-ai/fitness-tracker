@@ -744,10 +744,10 @@ def gewicht_verlauf():
 
     # Echte ÄUSSERE Grenzen fürs Zoomen/Verschieben (nicht nur die
     # Startansicht!): ohne das würde die Zoom-Erweiterung die Achse bei
-    # jeder Interaktion einfach unbegrenzt weiterlaufen lassen. Bewusst
-    # OHNE die Projektion -- die extrapoliert 3 Monate in die Zukunft und
-    # würde die Grenze sonst je nach Trend unnötig weit nach oben/unten
-    # ziehen, weit über das hinaus, was praktisch sinnvoll ist.
+    # jeder Interaktion einfach unbegrenzt weiterlaufen lassen. OHNE
+    # zusätzlichen Puffer -- die Grenze soll genau dem Start/Ziel-Rahmen
+    # entsprechen, nur falls echte Werte sogar noch weiter außerhalb liegen
+    # (z.B. ein Ausreißer-Eintrag), wird gerade so viel wie nötig erweitert.
     y_kandidaten = []
     if y_achse_min is not None:
         y_kandidaten.append(y_achse_min)
@@ -755,8 +755,8 @@ def gewicht_verlauf():
         y_kandidaten.append(y_achse_max)
     y_kandidaten += [e["wert"] for e in eintraege_aufsteigend]
 
-    y_limit_min = round(min(y_kandidaten) - 5, 1) if y_kandidaten else None
-    y_limit_max = round(max(y_kandidaten) + 5, 1) if y_kandidaten else None
+    y_limit_min = round(min(y_kandidaten), 1) if y_kandidaten else None
+    y_limit_max = round(max(y_kandidaten), 1) if y_kandidaten else None
 
     x_limit_min = (date.fromisoformat(bereich_start) - timedelta(days=14)).isoformat()
     x_limit_max = (date.fromisoformat(bereich_ende) + timedelta(days=14)).isoformat()
