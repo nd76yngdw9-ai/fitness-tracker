@@ -345,6 +345,10 @@ input[type="date"] {
     gap: 4px;
 }
 
+.vb-minus-btn {
+    transform: rotate(90deg);
+}
+
 .vb-pfeil-kreuz {
     position: relative;
     width: 98px;
