@@ -290,26 +290,35 @@ input[type="date"] {
 .chart-vollbild-inhalt {
     flex: 1;
     position: relative;
-    touch-action: none;
+    min-height: 0;
     overflow: hidden;
 }
 
-/* Der eigentliche Trick fürs "Querformat ohne Drehen": dieser Container
-   wird per JS auf die vertauschten Maße gesetzt (Höhe des verfügbaren
-   Bereichs wird zu seiner Breite und umgekehrt) und dann um 90° gedreht.
-   Optisch sieht es dadurch wie Querformat aus, auch wenn das Handy
-   physisch im Hochformat bleibt. */
-.chart-vollbild-gedreht {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(90deg);
-}
-
-.chart-vollbild-gedreht canvas {
-    display: block;
+.chart-vollbild-inhalt canvas {
     width: 100% !important;
     height: 100% !important;
+}
+
+.chart-vollbild-steuerung {
+    margin-top: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+.vb-button-reihe {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.vb-button {
+    flex: 1;
+    padding: 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
 }
 
 .chart-zoom-leiste {

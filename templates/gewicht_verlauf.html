@@ -22,7 +22,7 @@
     <div class="chart-zoom-leiste">
         <p class="muted chart-hinweis">
             Zum Zoomen kneifen/scrollen &middot; zum Verschieben ziehen &middot;
-            Diagramm antippen für Querformat-Vollbild
+            Diagramm antippen für Vollbild
         </p>
         <button type="button" id="zoom-zuruecksetzen-btn" class="secondary-button">Auf heute zurücksetzen</button>
     </div>
@@ -70,18 +70,28 @@
 <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
 
 {% if eintraege %}
-<!-- Vollbild-Overlay: komplett leer, bis es geöffnet wird (JS baut den
-     zweiten Chart erst dann, um nicht doppelt Arbeit zu leisten, wenn
-     nie draufgetippt wird). -->
 <div id="chart-vollbild-overlay" class="chart-vollbild-overlay" hidden>
     <div class="chart-vollbild-kopf">
-        <p class="muted">Querformat-Ansicht &middot; X zum Schließen</p>
+        <p class="muted">Vollbild &middot; X zum Schließen</p>
         <button type="button" id="chart-vollbild-schliessen" class="chart-vollbild-schliessen-btn">✕</button>
     </div>
     <div class="chart-vollbild-inhalt" id="chart-vollbild-inhalt">
-        <div class="chart-vollbild-gedreht" id="chart-vollbild-gedreht">
-            <canvas id="gewicht-chart-vollbild"></canvas>
+        <canvas id="gewicht-chart-vollbild"></canvas>
+    </div>
+    <div class="chart-vollbild-steuerung">
+        <div class="vb-button-reihe">
+            <button type="button" id="vb-zoom-out" class="vb-button">－ Zoom</button>
+            <button type="button" id="vb-zoom-in" class="vb-button">＋ Zoom</button>
         </div>
+        <div class="vb-button-reihe">
+            <button type="button" id="vb-pan-links" class="vb-button">◀ Zeit</button>
+            <button type="button" id="vb-pan-rechts" class="vb-button">Zeit ▶</button>
+        </div>
+        <div class="vb-button-reihe">
+            <button type="button" id="vb-pan-hoch" class="vb-button">▲ Gewicht</button>
+            <button type="button" id="vb-pan-runter" class="vb-button">▼ Gewicht</button>
+        </div>
+        <button type="button" id="vb-reset" class="secondary-button">Zurücksetzen</button>
     </div>
 </div>
 {% endif %}
@@ -118,6 +128,8 @@
     // Vollbild-Version dieselbe Konfiguration bekommen, ohne Code doppelt
     // zu pflegen. Jeder Chart braucht sein EIGENES Datensatz-Array-Objekt
     // (Chart.js verändert es intern), daher eine neue Kopie pro Aufruf.
+    // Beide Versionen nutzen bewusst DIESELBEN (nicht vertauschten) Achsen
+    // -- Datum=X, Gewicht=Y, exakt wie im kleinen Diagramm.
     function baueDatensaetze() {
         return [
             {
@@ -159,28 +171,18 @@
         ];
     }
 
-    function baueOptionen() {
+    function baueOptionen(mitGesten) {
         return {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
                     labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
-                    // Klick auf die Legende soll NUR die Datenreihe ein-/ausblenden
-                    // (Standardverhalten), aber NICHT als Klick auf den ganzen
-                    // Chart weitergereicht werden -- sonst öffnet sich beim
-                    // An-/Abwählen einer Linie ungewollt das Vollbild.
-                    onClick: function (e, legendItem, legend) {
-                        Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
-                        if (e.native) {
-                            e.native.stopPropagation();
-                        }
-                    },
                 },
                 zoom: {
-                    pan: { enabled: true, mode: "xy" },
+                    pan: { enabled: mitGesten, mode: "xy" },
                     zoom: {
-                        wheel: { enabled: true },
-                        pinch: { enabled: true },
+                        wheel: { enabled: mitGesten },
+                        pinch: { enabled: mitGesten },
                         mode: "xy",
                     },
                     limits: {
@@ -205,116 +207,50 @@
         };
     }
 
-    // Für das gedrehte Vollbild-Diagramm: X und Y werden in Datenpunkten
-    // UND Skalen-Konfiguration vertauscht (Gewicht auf lokal-X, Datum auf
-    // lokal-Y). Grund: der Container wird VOR der Drehung breiter als
-    // hoch aufgebaut (vertauschte Maße), damit er nach der 90°-Drehung
-    // die Portrait-Fläche exakt ausfüllt. Ohne den Datentausch würde
-    // dabei das Datum (weiterhin auf der ursprünglich breiten Seite)
-    // nach der Drehung SENKRECHT erscheinen statt waagerecht -- mit dem
-    // Tausch landet Gewicht auf der (vor der Drehung) breiten Seite und
-    // erscheint dadurch nach der Drehung correct senkrecht, Datum
-    // waagerecht.
-    //
-    // Ehrlicher Hinweis: Die Zoom-/Wisch-Gesten selbst kennen diese
-    // CSS-Drehung NICHT (die zugrundeliegende Bibliothek arbeitet immer
-    // mit den ungedrehten Bildschirm-Koordinaten). Das lässt sich über
-    // die normalen Einstellungen nicht vollständig auflösen -- das ist
-    // eine echte Grenze dieses "Optik-Tricks ohne echte Gerätedrehung".
-    function vertauscheXY(punkte) {
-        return punkte.map(function (p) { return { x: p.y, y: p.x }; });
-    }
-
-    function baueDatensaetzeGedreht() {
-        const normale = baueDatensaetze();
-        return normale.map(function (datensatz) {
-            return Object.assign({}, datensatz, { data: vertauscheXY(datensatz.data) });
-        });
-    }
-
-    function baueOptionenGedreht() {
-        return {
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    labels: { boxWidth: 14, font: { size: 11 }, padding: 10 },
-                    onClick: function (e, legendItem, legend) {
-                        Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
-                        if (e.native) {
-                            e.native.stopPropagation();
-                        }
-                    },
-                },
-                zoom: {
-                    pan: { enabled: true, mode: "xy" },
-                    zoom: {
-                        wheel: { enabled: true },
-                        pinch: { enabled: true },
-                        mode: "xy",
-                    },
-                    limits: {
-                        // Vertauscht: Gewichtsgrenzen jetzt auf X, Datumsgrenzen auf Y.
-                        x: { min: yLimitMin, max: yLimitMax },
-                        y: { min: xLimitMin.getTime(), max: xLimitMax.getTime() },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    min: yAchseMin,
-                    max: yAchseMax,
-                },
-                y: {
-                    type: "time",
-                    time: { unit: "day", tooltipFormat: "DD.MM.YYYY", displayFormats: { day: "DD.MM." } },
-                    min: anfangsMin,
-                    max: anfangsMax,
-                    ticks: { font: { size: 10 } },
-                },
-            },
-        };
+    // Prüft, ob ein Klick innerhalb der Legenden-Fläche des Charts liegt.
+    // Zuverlässiger als ein Umweg über Event-Propagation: wir fragen
+    // Chart.js direkt nach den Maßen der Legende und vergleichen sie mit
+    // der Klickposition, bevor wir entscheiden, ob das Vollbild geöffnet
+    // werden soll.
+    function klickAufLegende(ereignis, chart) {
+        if (!chart || !chart.legend) return false;
+        const box = chart.canvas.getBoundingClientRect();
+        const x = ereignis.clientX - box.left;
+        const y = ereignis.clientY - box.top;
+        const legende = chart.legend;
+        return x >= legende.left && x <= legende.right && y >= legende.top && y <= legende.bottom;
     }
 
     const gewichtChart = new Chart(document.getElementById("gewicht-chart"), {
         type: "line",
         data: { datasets: baueDatensaetze() },
-        options: baueOptionen(),
+        options: baueOptionen(true),
     });
 
     document.getElementById("zoom-zuruecksetzen-btn").addEventListener("click", function () {
         gewichtChart.resetZoom();
     });
 
-    // --- Vollbild (optisch im Querformat, ohne dass das Handy gedreht
-    //     werden muss: der Innenbereich wird per CSS-transform um 90°
-    //     gedreht, seine Maße dafür vorher vertauscht -- verfügbare Höhe
-    //     wird zur Breite, verfügbare Breite wird zur Höhe). ---
+    // --- Vollbild: gleiche Achsen wie das kleine Diagramm, aber OHNE
+    //     Wisch-/Kneif-Gesten -- stattdessen feste Buttons für Zoom/Pan.
+    //     Grund: Gesten würden auf dem gedrehten Container falsch herum
+    //     wirken (die Zoom-Bibliothek kennt die CSS-Drehung nicht);
+    //     Buttons rufen dagegen direkt die Chart.js-Zoom-API auf und sind
+    //     davon komplett unabhängig -- keine Verwechslungsgefahr. ---
     const overlay = document.getElementById("chart-vollbild-overlay");
-    const inhalt = document.getElementById("chart-vollbild-inhalt");
-    const gedreht = document.getElementById("chart-vollbild-gedreht");
     let vollbildChart = null;
 
-    function vollbildGroesseAnpassen() {
-        const verfuegbareBreite = inhalt.clientWidth;
-        const verfuegbareHoehe = inhalt.clientHeight;
-        // Nach der 90°-Drehung wird die Höhe des Containers optisch zu
-        // seiner Breite (und umgekehrt) -- deshalb hier vertauscht.
-        gedreht.style.width = verfuegbareHoehe + "px";
-        gedreht.style.height = verfuegbareBreite + "px";
-        if (vollbildChart) {
-            vollbildChart.resize();
+    function vollbildOeffnen(ereignis) {
+        if (klickAufLegende(ereignis, gewichtChart)) {
+            return; // Klick auf die Legende soll nur die Linie umschalten
         }
-    }
-
-    function vollbildOeffnen() {
         overlay.hidden = false;
-        document.body.style.overflow = "hidden"; // Hintergrund nicht mitscrollen
-        vollbildGroesseAnpassen();
+        document.body.style.overflow = "hidden";
         if (!vollbildChart) {
             vollbildChart = new Chart(document.getElementById("gewicht-chart-vollbild"), {
                 type: "line",
-                data: { datasets: baueDatensaetzeGedreht() },
-                options: baueOptionenGedreht(),
+                data: { datasets: baueDatensaetze() },
+                options: baueOptionen(false),
             });
         } else {
             vollbildChart.resize();
@@ -328,11 +264,15 @@
 
     document.getElementById("gewicht-chart-wrapper").addEventListener("click", vollbildOeffnen);
     document.getElementById("chart-vollbild-schliessen").addEventListener("click", vollbildSchliessen);
-    window.addEventListener("resize", function () {
-        if (!overlay.hidden) {
-            vollbildGroesseAnpassen();
-        }
-    });
+
+    const pixelSchritt = 60;
+    document.getElementById("vb-zoom-in").addEventListener("click", function () { vollbildChart.zoom(1.2); });
+    document.getElementById("vb-zoom-out").addEventListener("click", function () { vollbildChart.zoom(0.8); });
+    document.getElementById("vb-pan-links").addEventListener("click", function () { vollbildChart.pan({ x: pixelSchritt }); });
+    document.getElementById("vb-pan-rechts").addEventListener("click", function () { vollbildChart.pan({ x: -pixelSchritt }); });
+    document.getElementById("vb-pan-hoch").addEventListener("click", function () { vollbildChart.pan({ y: pixelSchritt }); });
+    document.getElementById("vb-pan-runter").addEventListener("click", function () { vollbildChart.pan({ y: -pixelSchritt }); });
+    document.getElementById("vb-reset").addEventListener("click", function () { vollbildChart.resetZoom(); });
 </script>
 {% endif %}
 {% endblock %}
