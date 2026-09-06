@@ -276,7 +276,21 @@
         document.body.style.overflow = "";
     }
 
-    document.getElementById("gewicht-chart-wrapper").addEventListener("dblclick", vollbildOeffnen);
+    // Eigene Doppelklick-Erkennung statt des nativen "dblclick"-Events:
+    // Hammer.js (fürs Zoom-Plugin) fängt Touch-Events ab, wodurch der
+    // Browser auf dem Handy oft gar kein natives dblclick mehr auslöst.
+    // Zwei normale "click"-Events kurz hintereinander funktionieren
+    // dagegen zuverlässig, auch auf Touch-Geräten.
+    let letzterKlickZeitpunkt = 0;
+    document.getElementById("gewicht-chart-wrapper").addEventListener("click", function (ereignis) {
+        const jetzt = Date.now();
+        if (jetzt - letzterKlickZeitpunkt < 350) {
+            letzterKlickZeitpunkt = 0;
+            vollbildOeffnen(ereignis);
+        } else {
+            letzterKlickZeitpunkt = jetzt;
+        }
+    });
     document.getElementById("chart-vollbild-schliessen").addEventListener("click", vollbildSchliessen);
     window.addEventListener("resize", function () {
         if (!overlay.hidden) {
