@@ -83,7 +83,6 @@
             <div class="vb-zoom-gruppe">
                 <button type="button" id="vb-zoom-in" class="vb-mini-btn">＋</button>
                 <button type="button" id="vb-zoom-out" class="vb-mini-btn">－</button>
-                <button type="button" id="vb-reset" class="vb-mini-btn" title="Zurücksetzen">⟲</button>
             </div>
             <div class="vb-pfeil-kreuz">
                 <button type="button" id="vb-pan-hoch" class="vb-mini-btn vb-pfeil-hoch">▲</button>
@@ -288,11 +287,12 @@
     const pixelSchritt = 60;
     document.getElementById("vb-zoom-in").addEventListener("click", function () { vollbildChart.zoom(1.2); });
     document.getElementById("vb-zoom-out").addEventListener("click", function () { vollbildChart.zoom(0.8); });
-    document.getElementById("vb-pan-links").addEventListener("click", function () { vollbildChart.pan({ x: pixelSchritt }); });
-    document.getElementById("vb-pan-rechts").addEventListener("click", function () { vollbildChart.pan({ x: -pixelSchritt }); });
-    document.getElementById("vb-pan-hoch").addEventListener("click", function () { vollbildChart.pan({ y: pixelSchritt }); });
-    document.getElementById("vb-pan-runter").addEventListener("click", function () { vollbildChart.pan({ y: -pixelSchritt }); });
-    document.getElementById("vb-reset").addEventListener("click", function () { vollbildChart.resetZoom(); });
+    // Wegen der 90°-Drehung wirken die Pfeile "über Kreuz" -- hier anhand
+    // der tatsächlich beobachteten Richtung korrigiert zugeordnet.
+    document.getElementById("vb-pan-hoch").addEventListener("click", function () { vollbildChart.pan({ x: pixelSchritt }); });
+    document.getElementById("vb-pan-runter").addEventListener("click", function () { vollbildChart.pan({ x: -pixelSchritt }); });
+    document.getElementById("vb-pan-links").addEventListener("click", function () { vollbildChart.pan({ y: -pixelSchritt }); });
+    document.getElementById("vb-pan-rechts").addEventListener("click", function () { vollbildChart.pan({ y: pixelSchritt }); });
 </script>
 {% endif %}
 {% endblock %}

@@ -311,28 +311,31 @@ input[type="date"] {
     height: 100% !important;
 }
 
-/* Kompakte Steuerung als Overlay oben rechts -- bleibt aufrecht (kein
-   Kind des gedrehten Containers), nimmt kaum Platz weg. */
+/* Kompakte Steuerung als Overlay, oben rechts im sichtbaren Diagramm --
+   bleibt aufrecht (kein Kind des gedrehten Containers). Etwas Abstand von
+   oben/rechts, damit sie nicht die Achsenbeschriftung oder die Legende
+   überdeckt. */
 .vb-steuerung-kompakt {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 44px;
+    right: 56px;
     z-index: 10;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 8px;
 }
 
 .vb-mini-btn {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     padding: 0;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     line-height: 1;
     color: var(--text);
-    background: rgba(28, 33, 40, 0.85);
+    background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 7px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .vb-zoom-gruppe {
@@ -343,8 +346,8 @@ input[type="date"] {
 
 .vb-pfeil-kreuz {
     position: relative;
-    width: 104px;
-    height: 104px;
+    width: 98px;
+    height: 98px;
     flex-shrink: 0;
 }
 
@@ -352,10 +355,10 @@ input[type="date"] {
     position: absolute;
 }
 
-.vb-pfeil-hoch { top: 0; left: 36px; }
-.vb-pfeil-links { top: 36px; left: 0; }
-.vb-pfeil-rechts { top: 36px; left: 72px; }
-.vb-pfeil-runter { top: 72px; left: 36px; }
+.vb-pfeil-hoch { top: 0; left: 34px; }
+.vb-pfeil-links { top: 34px; left: 0; }
+.vb-pfeil-rechts { top: 34px; left: 68px; }
+.vb-pfeil-runter { top: 68px; left: 34px; }
 
 .chart-zoom-leiste {
     margin-top: 10px;
