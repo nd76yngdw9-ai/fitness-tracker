@@ -294,32 +294,68 @@ input[type="date"] {
     overflow: hidden;
 }
 
-.chart-vollbild-inhalt canvas {
+/* Simuliertes Querformat: dieser Container wird per JS auf die
+   vertauschten Maße gesetzt (Höhe des verfügbaren Bereichs wird zu
+   seiner Breite und umgekehrt) und dann um 90° gedreht. Optisch sieht es
+   dadurch wie Querformat aus, auch wenn das Handy im Hochformat bleibt. */
+.chart-vollbild-gedreht {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.chart-vollbild-gedreht canvas {
+    display: block;
     width: 100% !important;
     height: 100% !important;
 }
 
-.chart-vollbild-steuerung {
-    margin-top: 10px;
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
-}
-
-.vb-button-reihe {
+/* Kompakte Steuerung als Overlay oben rechts -- bleibt aufrecht (kein
+   Kind des gedrehten Containers), nimmt kaum Platz weg. */
+.vb-steuerung-kompakt {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
     display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
+    align-items: flex-start;
+    gap: 10px;
 }
 
-.vb-button {
-    flex: 1;
-    padding: 12px;
+.vb-mini-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
     font-size: 0.95rem;
-    font-weight: 600;
+    line-height: 1;
     color: var(--text);
-    background: var(--card-bg);
+    background: rgba(28, 33, 40, 0.85);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
 }
+
+.vb-zoom-gruppe {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vb-pfeil-kreuz {
+    position: relative;
+    width: 104px;
+    height: 104px;
+    flex-shrink: 0;
+}
+
+.vb-pfeil-kreuz .vb-mini-btn {
+    position: absolute;
+}
+
+.vb-pfeil-hoch { top: 0; left: 36px; }
+.vb-pfeil-links { top: 36px; left: 0; }
+.vb-pfeil-rechts { top: 36px; left: 72px; }
+.vb-pfeil-runter { top: 72px; left: 36px; }
 
 .chart-zoom-leiste {
     margin-top: 10px;

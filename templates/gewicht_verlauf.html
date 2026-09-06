@@ -76,22 +76,22 @@
         <button type="button" id="chart-vollbild-schliessen" class="chart-vollbild-schliessen-btn">✕</button>
     </div>
     <div class="chart-vollbild-inhalt" id="chart-vollbild-inhalt">
-        <canvas id="gewicht-chart-vollbild"></canvas>
-    </div>
-    <div class="chart-vollbild-steuerung">
-        <div class="vb-button-reihe">
-            <button type="button" id="vb-zoom-out" class="vb-button">－ Zoom</button>
-            <button type="button" id="vb-zoom-in" class="vb-button">＋ Zoom</button>
+        <div class="chart-vollbild-gedreht" id="chart-vollbild-gedreht">
+            <canvas id="gewicht-chart-vollbild"></canvas>
         </div>
-        <div class="vb-button-reihe">
-            <button type="button" id="vb-pan-links" class="vb-button">◀ Zeit</button>
-            <button type="button" id="vb-pan-rechts" class="vb-button">Zeit ▶</button>
+        <div class="vb-steuerung-kompakt">
+            <div class="vb-zoom-gruppe">
+                <button type="button" id="vb-zoom-in" class="vb-mini-btn">＋</button>
+                <button type="button" id="vb-zoom-out" class="vb-mini-btn">－</button>
+                <button type="button" id="vb-reset" class="vb-mini-btn" title="Zurücksetzen">⟲</button>
+            </div>
+            <div class="vb-pfeil-kreuz">
+                <button type="button" id="vb-pan-hoch" class="vb-mini-btn vb-pfeil-hoch">▲</button>
+                <button type="button" id="vb-pan-links" class="vb-mini-btn vb-pfeil-links">◀</button>
+                <button type="button" id="vb-pan-rechts" class="vb-mini-btn vb-pfeil-rechts">▶</button>
+                <button type="button" id="vb-pan-runter" class="vb-mini-btn vb-pfeil-runter">▼</button>
+            </div>
         </div>
-        <div class="vb-button-reihe">
-            <button type="button" id="vb-pan-hoch" class="vb-button">▲ Gewicht</button>
-            <button type="button" id="vb-pan-runter" class="vb-button">▼ Gewicht</button>
-        </div>
-        <button type="button" id="vb-reset" class="secondary-button">Zurücksetzen</button>
     </div>
 </div>
 {% endif %}
@@ -238,7 +238,21 @@
     //     Buttons rufen dagegen direkt die Chart.js-Zoom-API auf und sind
     //     davon komplett unabhängig -- keine Verwechslungsgefahr. ---
     const overlay = document.getElementById("chart-vollbild-overlay");
+    const inhalt = document.getElementById("chart-vollbild-inhalt");
+    const gedreht = document.getElementById("chart-vollbild-gedreht");
     let vollbildChart = null;
+
+    function vollbildGroesseAnpassen() {
+        const verfuegbareBreite = inhalt.clientWidth;
+        const verfuegbareHoehe = inhalt.clientHeight;
+        // Nach der 90°-Drehung wird die Höhe des Containers optisch zu
+        // seiner Breite (und umgekehrt) -- deshalb hier vertauscht.
+        gedreht.style.width = verfuegbareHoehe + "px";
+        gedreht.style.height = verfuegbareBreite + "px";
+        if (vollbildChart) {
+            vollbildChart.resize();
+        }
+    }
 
     function vollbildOeffnen(ereignis) {
         if (klickAufLegende(ereignis, gewichtChart)) {
@@ -246,6 +260,7 @@
         }
         overlay.hidden = false;
         document.body.style.overflow = "hidden";
+        vollbildGroesseAnpassen();
         if (!vollbildChart) {
             vollbildChart = new Chart(document.getElementById("gewicht-chart-vollbild"), {
                 type: "line",
@@ -264,6 +279,11 @@
 
     document.getElementById("gewicht-chart-wrapper").addEventListener("click", vollbildOeffnen);
     document.getElementById("chart-vollbild-schliessen").addEventListener("click", vollbildSchliessen);
+    window.addEventListener("resize", function () {
+        if (!overlay.hidden) {
+            vollbildGroesseAnpassen();
+        }
+    });
 
     const pixelSchritt = 60;
     document.getElementById("vb-zoom-in").addEventListener("click", function () { vollbildChart.zoom(1.2); });
