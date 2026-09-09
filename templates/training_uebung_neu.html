@@ -7,9 +7,12 @@
 
 <form method="post" class="form" id="uebung-form">
     <label for="uebung">Übung</label>
-    <input type="text" id="uebung" name="uebung" list="uebungen-liste"
-           placeholder="Übung wählen oder neue eintippen" required autocomplete="off"
-           value="{{ vorausgefuellte_uebung }}">
+    <div class="eingabe-mit-pfeil">
+        <input type="text" id="uebung" name="uebung" list="uebungen-liste"
+               placeholder="Übung wählen oder neue eintippen" required autocomplete="off"
+               value="{{ vorausgefuellte_uebung }}">
+        <span class="dropdown-pfeil">▾</span>
+    </div>
     <datalist id="uebungen-liste">
         {% for u in uebungen %}
         <option value="{{ u['name'] }}">
@@ -35,7 +38,7 @@
         </div>
         <div class="satz-feld">
             <label>Wdh.</label>
-            <input type="number" name="wiederholungen[]" placeholder="z.B. 5">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" name="wiederholungen[]" placeholder="z.B. 5">
         </div>
         <button type="button" class="satz-entfernen-btn" title="Satz entfernen">&times;</button>
     </div>

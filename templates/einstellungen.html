@@ -16,7 +16,7 @@
            value="{{ werte['zielgewicht'] }}" required>
 
     <label for="kalorienziel">Kalorienziel (kcal/Tag)</label>
-    <input type="number" id="kalorienziel" name="kalorienziel"
+    <input type="text" inputmode="numeric" pattern="[0-9]*" id="kalorienziel" name="kalorienziel"
            value="{{ werte['kalorienziel'] }}" required>
 
     <label for="proteinziel">Protein-Ziel (g/Tag, optional)</label>
