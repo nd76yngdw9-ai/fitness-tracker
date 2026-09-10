@@ -50,9 +50,9 @@
     + Übung hinzufügen
 </a>
 
-<a href="{{ url_for('index') }}" class="link fertig-link">
-    Drening abschließen &amp; zum Dashboard
-</a>
+<form method="post" action="{{ url_for('training_abschliessen', einheit_id=einheit['id']) }}" class="fertig-link">
+    <button type="submit" class="link fertig-button">Drening abschließen &amp; zum Dashboard</button>
+</form>
 
 <form method="post" action="{{ url_for('training_loeschen', einheit_id=einheit['id']) }}"
       onsubmit="return confirm('Das komplette Drening mit allen Übungen löschen?');">

@@ -12,14 +12,28 @@
 <h2 class="section-heading">Drenings</h2>
 {% if einheiten %}
     <ul class="list">
-    {% for e in einheiten %}
+    {% for e in einheiten[:3] %}
         <li>
             <a href="{{ url_for('training_session', einheit_id=e['id']) }}" class="link">
-                {{ e["datum"] }}{% if e["uebungen"] %} – {{ e["uebungen"] | join(", ") }}{% endif %}
+                {{ e["datum"] }}{% if e["muskelgruppen"] %} – {{ e["muskelgruppen"] | join("/") }}{% endif %}{% if e["dauer"] %} ({{ e["dauer"] }}){% endif %}
             </a>
         </li>
     {% endfor %}
     </ul>
+    {% if einheiten | length > 3 %}
+    <ul class="list" id="weitere-drenings" hidden>
+        {% for e in einheiten[3:] %}
+        <li>
+            <a href="{{ url_for('training_session', einheit_id=e['id']) }}" class="link">
+                {{ e["datum"] }}{% if e["muskelgruppen"] %} – {{ e["muskelgruppen"] | join("/") }}{% endif %}{% if e["dauer"] %} ({{ e["dauer"] }}){% endif %}
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    <button type="button" id="mehr-drenings-btn" class="secondary-button">
+        {{ einheiten | length - 3 }} weitere anzeigen
+    </button>
+    {% endif %}
 {% else %}
     <p class="muted">Noch keine Drenings eingetragen.</p>
 {% endif %}
@@ -105,6 +119,16 @@
 
 {% block extra_scripts %}
 <script>
+    // "Mehr anzeigen" für die Drenings-Liste -- rein clientseitig, kein
+    // Neuladen der Seite nötig.
+    const mehrDrainingsBtn = document.getElementById("mehr-drenings-btn");
+    if (mehrDrainingsBtn) {
+        mehrDrainingsBtn.addEventListener("click", function () {
+            document.getElementById("weitere-drenings").hidden = false;
+            mehrDrainingsBtn.hidden = true;
+        });
+    }
+
     // Volumen-Trend: läuft immer, unabhängig von einer ausgewählten Übung.
     const wochenLabels = {{ wochen_labels_json | safe }};
     const wochenWerte = {{ wochen_werte_json | safe }};

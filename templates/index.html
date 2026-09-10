@@ -82,7 +82,7 @@
         {% for training in letzte_trainings %}
             <li>
                 <a href="{{ url_for('training_session', einheit_id=training['id']) }}" class="link">
-                    {{ training["datum"] }}{% if training["uebungen"] %} – {{ training["uebungen"] | join(", ") }}{% endif %}
+                    {{ training["datum"] }}{% if training["uebungen"] %} – {{ training["uebungen"] | join(", ") }}{% endif %}{% if training["dauer"] %} ({{ training["dauer"] }}){% endif %}
                 </a>
             </li>
         {% endfor %}

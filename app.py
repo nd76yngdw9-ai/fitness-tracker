@@ -175,6 +175,11 @@ def init_db():
         conn, "trainingseinheit",
         "CREATE TABLE trainingseinheit (id INTEGER PRIMARY KEY AUTOINCREMENT, benutzer_id INTEGER NOT NULL, datum TEXT NOT NULL, erstellt_um TEXT NOT NULL)"
     )
+    # beendet_um: wird gesetzt, sobald "Drening abschließen" angetippt
+    # wird -- zusammen mit erstellt_um ergibt das die Trainingsdauer.
+    trainingseinheit_spalten = [r["name"] for r in conn.execute("PRAGMA table_info(trainingseinheit)")]
+    if "beendet_um" not in trainingseinheit_spalten:
+        conn.execute("ALTER TABLE trainingseinheit ADD COLUMN beendet_um TEXT")
 
     # --- ernaehrung: braucht einen zusammengesetzten Primärschlüssel
     #     (benutzer_id, datum) statt nur datum -> komplett neu aufbauen ---
@@ -312,6 +317,16 @@ def init_db():
             "UPDATE uebungen SET muskelgruppe = ? WHERE id = ?",
             (rate_muskelgruppe(zeile["name"]), zeile["id"]),
         )
+    # "Arme" gibt es seit der Aufteilung in Bizeps/Trizeps nicht mehr --
+    # betroffene Übungen einmalig anhand des Namens neu zuordnen.
+    alte_arme_uebungen = conn.execute(
+        "SELECT id, name FROM uebungen WHERE muskelgruppe = 'Arme'"
+    ).fetchall()
+    for zeile in alte_arme_uebungen:
+        conn.execute(
+            "UPDATE uebungen SET muskelgruppe = ? WHERE id = ?",
+            (rate_muskelgruppe(zeile["name"]), zeile["id"]),
+        )
 
     # --- Trainingsvorlagen (Splits): eine Vorlage hat einen Namen und
     #     enthält beliebig viele Übungsnamen in fester Reihenfolge. ---
@@ -370,17 +385,20 @@ TRAININGS_SPRUECHE = [
 
 
 # Feste Liste möglicher Muskelgruppen, u.a. für Dropdown-Menüs.
-MUSKELGRUPPEN = ["Brust", "Rücken", "Beine", "Schultern", "Arme", "Bauch", "Sonstiges"]
+MUSKELGRUPPEN = ["Brust", "Rücken", "Beine", "Schultern", "Bizeps", "Trizeps", "Bauch", "Sonstiges"]
 
 # Schlüsselwörter (kleingeschrieben) je Muskelgruppe -- fürs automatische
 # Vorschlagen beim erstmaligen Anlegen einer Übung. Reine Bequemlichkeit,
-# jederzeit von Hand änderbar.
+# jederzeit von Hand änderbar. Reihenfolge ist wichtig: "Beine" steht VOR
+# "Bizeps", damit z.B. "Beincurl" trotz "curl" im Namen nicht fälschlich
+# bei Bizeps landet (die erste passende Gruppe gewinnt).
 _MUSKELGRUPPEN_SCHLUESSELWOERTER = {
     "Brust": ["bank", "brust", "butterfly", "fliegende", "dips"],
     "Rücken": ["latzug", "rudern", "kreuzheben", "pulldown", "rücken", "klimmzug"],
     "Beine": ["kniebeuge", "beinpresse", "bein", "wade", "squat", "ausfallschritt"],
     "Schultern": ["schulter", "seitheben", "military", "nackendrücken"],
-    "Arme": ["bizeps", "trizeps", "curl", "arm", "hammercurl"],
+    "Bizeps": ["bizeps", "hammercurl"],
+    "Trizeps": ["trizeps"],
     "Bauch": ["bauch", "crunch", "plank", "sit-up"],
 }
 
@@ -393,6 +411,21 @@ def rate_muskelgruppe(uebungsname):
         if any(wort in name_klein for wort in schluesselwoerter):
             return gruppe
     return "Sonstiges"
+
+
+def formatiere_dauer(erstellt_um, beendet_um):
+    """Berechnet aus zwei ISO-Zeitstempeln die Dauer und gibt sie lesbar
+    zurück (z.B. "42 Min" oder "1 Std 15 Min"), oder None, falls das
+    Training noch nicht abgeschlossen wurde."""
+    if not beendet_um:
+        return None
+    start = datetime.fromisoformat(erstellt_um)
+    ende = datetime.fromisoformat(beendet_um)
+    gesamt_minuten = max(0, round((ende - start).total_seconds() / 60))
+    stunden, minuten = divmod(gesamt_minuten, 60)
+    if stunden > 0:
+        return f"{stunden} Std {minuten} Min"
+    return f"{minuten} Min"
 
 
 def get_einstellungen(conn, benutzer_id):
@@ -596,6 +629,7 @@ def index():
             "id": einheit["id"],
             "datum": einheit["datum"],
             "uebungen": [u["uebung"] for u in uebungen_namen],
+            "dauer": formatiere_dauer(einheit["erstellt_um"], einheit["beendet_um"]),
         })
 
     # --- Wochenrückblick: Durchschnittswerte der letzten 7 Tage ---
@@ -1124,6 +1158,26 @@ def training_session(einheit_id):
     )
 
 
+@app.route("/training/<int:einheit_id>/abschliessen", methods=["POST"])
+def training_abschliessen(einheit_id):
+    """Markiert ein Training als beendet -- zusammen mit erstellt_um ergibt
+    das die Trainingsdauer. Nochmaliges Abschließen (z.B. Doppelklick)
+    überschreibt den Zeitpunkt einfach erneut, das ist unproblematisch."""
+    conn = get_db()
+    gehoert_mir = conn.execute(
+        "SELECT id FROM trainingseinheit WHERE id = ? AND benutzer_id = ?",
+        (einheit_id, aktueller_benutzer_id()),
+    ).fetchone()
+    if gehoert_mir:
+        conn.execute(
+            "UPDATE trainingseinheit SET beendet_um = ? WHERE id = ?",
+            (datetime.now().isoformat(), einheit_id),
+        )
+        conn.commit()
+    conn.close()
+    return redirect(url_for("index"))
+
+
 @app.route("/training/<int:einheit_id>/loeschen", methods=["POST"])
 def training_loeschen(einheit_id):
     conn = get_db()
@@ -1361,16 +1415,31 @@ def verlauf():
         "SELECT * FROM trainingseinheit WHERE benutzer_id = ? ORDER BY erstellt_um DESC",
         (benutzer_id,),
     ).fetchall()
+    muskelgruppe_je_uebung = {
+        zeile["name"]: zeile["muskelgruppe"] or "Sonstiges"
+        for zeile in conn.execute(
+            "SELECT name, muskelgruppe FROM uebungen WHERE benutzer_id = ?", (benutzer_id,)
+        ).fetchall()
+    }
+
     einheiten = []
     for einheit in einheiten_rohdaten:
         uebungen_namen = conn.execute(
             "SELECT DISTINCT uebung FROM trainingssatz WHERE trainingseinheit_id = ?",
             (einheit["id"],),
         ).fetchall()
+        gruppen_dieser_einheit = {
+            muskelgruppe_je_uebung.get(u["uebung"], "Sonstiges") for u in uebungen_namen
+        }
+        # In fester, sinnvoller Reihenfolge (MUSKELGRUPPEN-Liste) statt
+        # zufällig -- ergibt z.B. "Brust/Schultern/Trizeps" statt eine
+        # willkürliche Reihenfolge.
+        gruppen_sortiert = [g for g in MUSKELGRUPPEN if g in gruppen_dieser_einheit]
         einheiten.append({
             "id": einheit["id"],
             "datum": einheit["datum"],
-            "uebungen": [u["uebung"] for u in uebungen_namen],
+            "muskelgruppen": gruppen_sortiert,
+            "dauer": formatiere_dauer(einheit["erstellt_um"], einheit["beendet_um"]),
         })
 
     alle_uebungen = conn.execute(
@@ -1451,12 +1520,6 @@ def verlauf():
         WHERE te.benutzer_id = ? AND te.datum >= ?
     """, (benutzer_id, sieben_tage_start)).fetchall()
 
-    muskelgruppe_je_uebung = {
-        zeile["name"]: zeile["muskelgruppe"] or "Sonstiges"
-        for zeile in conn.execute(
-            "SELECT name, muskelgruppe FROM uebungen WHERE benutzer_id = ?", (benutzer_id,)
-        ).fetchall()
-    }
     volumen_je_muskelgruppe = {}
     for satz in saetze_letzte_woche:
         gruppe = muskelgruppe_je_uebung.get(satz["uebung"], "Sonstiges")
