@@ -90,6 +90,24 @@
     </form>
 </div>
 
+<div class="card" style="margin-top: 20px;">
+    <h2>Urlaubsmodus</h2>
+    {% if urlaub_aktiv %}
+        <p class="muted">Aktiv seit {{ urlaub_aktiv["start_datum"] }}. Solange aktiv, zählen
+            diese Tage nicht in die 7-Tage-Schnitte (Dashboard, Ernährungsverlauf, 7-Tage-
+            Durchschnittslinie im Gewichtsverlauf) und erscheinen im Trainings-Kalender in
+            eigener Farbe.</p>
+        <form method="post" action="{{ url_for('urlaub_beenden') }}">
+            <button type="submit" class="secondary-button">Urlaubsmodus beenden</button>
+        </form>
+    {% else %}
+        <p class="muted">Aktuell inaktiv.</p>
+        <form method="post" action="{{ url_for('urlaub_starten') }}">
+            <button type="submit" class="secondary-button">Urlaubsmodus starten</button>
+        </form>
+    {% endif %}
+</div>
+
 <p class="muted" style="margin-top: 16px;">
     <a href="{{ url_for('index') }}" class="link">&larr; Zurück zum Dashboard</a>
 </p>

@@ -346,6 +346,17 @@ def init_db():
         )
     """)
 
+    # --- Urlaubsmodus: Zeiträume, in denen Tage aus 7-Tage-Schnitten
+    #     herausgerechnet werden. end_datum = NULL heißt "läuft noch". ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS urlaubszeitraum (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            benutzer_id INTEGER NOT NULL,
+            start_datum TEXT NOT NULL,
+            end_datum TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -426,6 +437,35 @@ def formatiere_dauer(erstellt_um, beendet_um):
     if stunden > 0:
         return f"{stunden} Std {minuten} Min"
     return f"{minuten} Min"
+
+
+def urlaub_aktives_intervall(conn, benutzer_id):
+    """Gibt das gerade laufende Urlaubsintervall zurück (end_datum IS NULL),
+    oder None, wenn der Urlaubsmodus gerade nicht aktiv ist."""
+    return conn.execute(
+        "SELECT * FROM urlaubszeitraum WHERE benutzer_id = ? AND end_datum IS NULL",
+        (benutzer_id,),
+    ).fetchone()
+
+
+def hole_urlaubstage_menge(conn, benutzer_id, bis_datum=None):
+    """Gibt eine Menge aller Urlaubstage (als ISO-Datumsstrings) dieses
+    Benutzers zurück. Ein noch laufendes Intervall (end_datum NULL) wird
+    bis "bis_datum" (Standard: heute) mitgezählt."""
+    bis_datum = bis_datum or date.today()
+    zeitraeume = conn.execute(
+        "SELECT start_datum, end_datum FROM urlaubszeitraum WHERE benutzer_id = ?",
+        (benutzer_id,),
+    ).fetchall()
+    tage = set()
+    for zeitraum in zeitraeume:
+        start = date.fromisoformat(zeitraum["start_datum"])
+        ende = date.fromisoformat(zeitraum["end_datum"]) if zeitraum["end_datum"] else bis_datum
+        aktuelles_datum = start
+        while aktuelles_datum <= ende:
+            tage.add(aktuelles_datum.isoformat())
+            aktuelles_datum += timedelta(days=1)
+    return tage
 
 
 def get_einstellungen(conn, benutzer_id):
@@ -642,16 +682,31 @@ def index():
             "dauer": formatiere_dauer(einheit["erstellt_um"], einheit["beendet_um"]),
         })
 
-    # --- Wochenrückblick: Durchschnittswerte der letzten 7 Tage ---
+    # --- Wochenrückblick: Durchschnittswerte der letzten 7 Tage, ohne
+    #     Urlaubstage (falls Urlaubsmodus aktiv war/ist) ---
+    urlaubstage = hole_urlaubstage_menge(conn, benutzer_id)
     sieben_tage_start = (date.today() - timedelta(days=6)).isoformat()
-    gewicht_schnitt = conn.execute(
-        "SELECT AVG(wert) AS schnitt FROM gewicht WHERE benutzer_id = ? AND datum >= ?",
+
+    gewicht_zeilen_woche = conn.execute(
+        "SELECT datum, wert FROM gewicht WHERE benutzer_id = ? AND datum >= ?",
         (benutzer_id, sieben_tage_start),
-    ).fetchone()["schnitt"]
-    kalorien_schnitt = conn.execute(
-        "SELECT AVG(kalorien) AS schnitt FROM ernaehrung WHERE benutzer_id = ? AND datum >= ?",
+    ).fetchall()
+    gewicht_werte_ohne_urlaub = [z["wert"] for z in gewicht_zeilen_woche if z["datum"] not in urlaubstage]
+    gewicht_schnitt = (
+        sum(gewicht_werte_ohne_urlaub) / len(gewicht_werte_ohne_urlaub)
+        if gewicht_werte_ohne_urlaub else None
+    )
+
+    kalorien_zeilen_woche = conn.execute(
+        "SELECT datum, kalorien FROM ernaehrung WHERE benutzer_id = ? AND datum >= ?",
         (benutzer_id, sieben_tage_start),
-    ).fetchone()["schnitt"]
+    ).fetchall()
+    kalorien_werte_ohne_urlaub = [z["kalorien"] for z in kalorien_zeilen_woche if z["datum"] not in urlaubstage]
+    kalorien_schnitt = (
+        sum(kalorien_werte_ohne_urlaub) / len(kalorien_werte_ohne_urlaub)
+        if kalorien_werte_ohne_urlaub else None
+    )
+
     trainings_diese_woche = conn.execute(
         "SELECT COUNT(*) AS anzahl FROM trainingseinheit WHERE benutzer_id = ? AND datum >= ?",
         (benutzer_id, sieben_tage_start),
@@ -673,9 +728,11 @@ def index():
     heatmap_tage = []
     for i in range(84):
         tag = heatmap_start + timedelta(days=i)
+        tag_iso = tag.isoformat()
         heatmap_tage.append({
-            "datum": tag.isoformat(),
-            "trainiert": tag.isoformat() in trainingstage_menge,
+            "datum": tag_iso,
+            "trainiert": tag_iso in trainingstage_menge,
+            "urlaub": tag_iso in urlaubstage,
         })
 
     # Startgewicht für die Fortschrittsanzeige: entweder das explizit in den
@@ -743,13 +800,43 @@ def einstellungen():
 
     aktuelle_werte = get_einstellungen(conn, benutzer_id)
     api_token = hole_oder_erzeuge_api_token(conn, benutzer_id)
+    urlaub_aktiv = urlaub_aktives_intervall(conn, benutzer_id)
     conn.close()
     return render_template(
         "einstellungen.html",
         werte=aktuelle_werte,
         benutzername=session.get("benutzername"),
         api_token=api_token,
+        urlaub_aktiv=urlaub_aktiv,
     )
+
+
+@app.route("/einstellungen/urlaub/starten", methods=["POST"])
+def urlaub_starten():
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+    # Kein doppeltes offenes Intervall anlegen, falls z.B. doppelt geklickt wird.
+    if not urlaub_aktives_intervall(conn, benutzer_id):
+        conn.execute(
+            "INSERT INTO urlaubszeitraum (benutzer_id, start_datum, end_datum) VALUES (?, ?, NULL)",
+            (benutzer_id, date.today().isoformat()),
+        )
+        conn.commit()
+    conn.close()
+    return redirect(url_for("einstellungen"))
+
+
+@app.route("/einstellungen/urlaub/beenden", methods=["POST"])
+def urlaub_beenden():
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+    conn.execute(
+        "UPDATE urlaubszeitraum SET end_datum = ? WHERE benutzer_id = ? AND end_datum IS NULL",
+        (date.today().isoformat(), benutzer_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("einstellungen"))
 
 
 @app.route("/einstellungen/api-token/neu", methods=["POST"])
@@ -798,6 +885,7 @@ def gewicht_verlauf():
         "SELECT * FROM gewicht WHERE benutzer_id = ? ORDER BY datum ASC, id ASC", (benutzer_id,)
     ).fetchall()
     einstellungen_zeile = get_einstellungen(conn, benutzer_id)
+    urlaubstage = hole_urlaubstage_menge(conn, benutzer_id)
     conn.close()
 
     labels_menge = {e["datum"] for e in eintraege_aufsteigend}
@@ -841,18 +929,22 @@ def gewicht_verlauf():
     # 7-Tage-gleitender Durchschnitt: für jeden Eintrag der Schnitt aller
     # Werte der letzten 7 Kalendertage (inkl. diesem Tag). Glättet
     # Tagesschwankungen (Wasser, Salz, Verdauung) stärker als der Rohwert.
+    # Urlaubstage fließen bewusst NICHT ein (weder als Beitrag zum Fenster
+    # eines anderen Tages, noch bekommen sie selbst einen Durchschnittspunkt) --
+    # so verzerrt z.B. urlaubsbedingtes Wasser/Salz nicht den Trend.
+    eintraege_ohne_urlaub = [e for e in eintraege_aufsteigend if e["datum"] not in urlaubstage]
     durchschnitt_je_datum = {}
-    for eintrag in eintraege_aufsteigend:
+    for eintrag in eintraege_ohne_urlaub:
         fenster_start = (date.fromisoformat(eintrag["datum"]) - timedelta(days=6)).isoformat()
         werte_im_fenster = [
-            e["wert"] for e in eintraege_aufsteigend
+            e["wert"] for e in eintraege_ohne_urlaub
             if fenster_start <= e["datum"] <= eintrag["datum"]
         ]
         durchschnitt_je_datum[eintrag["datum"]] = round(sum(werte_im_fenster) / len(werte_im_fenster), 1)
 
     gewicht_punkte = [{"x": e["datum"], "y": e["wert"]} for e in eintraege_aufsteigend]
     durchschnitt_punkte = [
-        {"x": e["datum"], "y": durchschnitt_je_datum[e["datum"]]} for e in eintraege_aufsteigend
+        {"x": e["datum"], "y": durchschnitt_je_datum[e["datum"]]} for e in eintraege_ohne_urlaub
     ]
     projektion_punkte = [
         {"x": d, "y": w} for d, w in sorted(projektion_je_datum.items())
@@ -1012,23 +1104,29 @@ def ernaehrung_verlauf():
     ).fetchall()
 
     sieben_tage_start = (date.today() - timedelta(days=6)).isoformat()
-    wochenschnitt_zeile = conn.execute(
-        """SELECT AVG(kalorien) AS kalorien, AVG(protein) AS protein,
-                  AVG(fett) AS fett, AVG(kohlenhydrate) AS kohlenhydrate,
-                  COUNT(*) AS anzahl
+    urlaubstage = hole_urlaubstage_menge(conn, benutzer_id)
+    zeilen_woche = conn.execute(
+        """SELECT datum, kalorien, protein, fett, kohlenhydrate
            FROM ernaehrung WHERE benutzer_id = ? AND datum >= ?""",
         (benutzer_id, sieben_tage_start),
-    ).fetchone()
+    ).fetchall()
     conn.close()
 
+    zeilen_ohne_urlaub = [z for z in zeilen_woche if z["datum"] not in urlaubstage]
+
+    def _schnitt(feld):
+        werte = [z[feld] for z in zeilen_ohne_urlaub if z[feld] is not None]
+        return sum(werte) / len(werte) if werte else None
+
     wochenschnitt = None
-    if wochenschnitt_zeile["anzahl"] > 0:
+    if zeilen_ohne_urlaub:
+        kalorien_schnitt = _schnitt("kalorien")
         wochenschnitt = {
-            "kalorien": round(wochenschnitt_zeile["kalorien"]),
-            "protein": round(wochenschnitt_zeile["protein"], 1) if wochenschnitt_zeile["protein"] is not None else None,
-            "fett": round(wochenschnitt_zeile["fett"], 1) if wochenschnitt_zeile["fett"] is not None else None,
-            "kohlenhydrate": round(wochenschnitt_zeile["kohlenhydrate"], 1) if wochenschnitt_zeile["kohlenhydrate"] is not None else None,
-            "anzahl_tage": wochenschnitt_zeile["anzahl"],
+            "kalorien": round(kalorien_schnitt) if kalorien_schnitt is not None else None,
+            "protein": round(_schnitt("protein"), 1) if _schnitt("protein") is not None else None,
+            "fett": round(_schnitt("fett"), 1) if _schnitt("fett") is not None else None,
+            "kohlenhydrate": round(_schnitt("kohlenhydrate"), 1) if _schnitt("kohlenhydrate") is not None else None,
+            "anzahl_tage": len(zeilen_ohne_urlaub),
         }
 
     return render_template("ernaehrung_verlauf.html", eintraege=eintraege, wochenschnitt=wochenschnitt)

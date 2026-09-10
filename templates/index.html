@@ -69,7 +69,7 @@
     <h2>Drenings-Kalender</h2>
     <div class="heatmap-raster" id="heatmap-raster">
         {% for tag in heatmap_tage %}
-        <div class="heatmap-tag {{ 'heatmap-trainiert' if tag['trainiert'] else '' }}" data-datum="{{ tag['datum'] }}"></div>
+        <div class="heatmap-tag {% if tag['trainiert'] %}heatmap-trainiert{% elif tag['urlaub'] %}heatmap-urlaub{% endif %}" data-datum="{{ tag['datum'] }}"></div>
         {% endfor %}
     </div>
     <p class="muted" id="heatmap-ausgewaehltes-datum" style="margin-top: 8px; min-height: 1.2em;">Letzte 12 Wochen &middot; Kachel antippen fürs Datum</p>
@@ -119,7 +119,14 @@
         kachel.addEventListener("click", function () {
             const datum = kachel.getAttribute("data-datum");
             const trainiert = kachel.classList.contains("heatmap-trainiert");
-            heatmapAnzeige.textContent = datum + (trainiert ? " – dreniert" : " – kein Drening");
+            const urlaub = kachel.classList.contains("heatmap-urlaub");
+            let text = datum + " – kein Drening";
+            if (trainiert) {
+                text = datum + " – dreniert";
+            } else if (urlaub) {
+                text = datum + " – Urlaub";
+            }
+            heatmapAnzeige.textContent = text;
         });
     });
 

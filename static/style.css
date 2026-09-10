@@ -519,6 +519,10 @@ input[type="date"] {
     background: var(--primary);
 }
 
+.heatmap-urlaub {
+    background: #f59e0b;
+}
+
 .form button[type="submit"] {
     margin-top: 20px;
     padding: 14px;
