@@ -616,19 +616,29 @@ def index():
     ).fetchone()
 
     letzte_einheiten = conn.execute(
-        "SELECT * FROM trainingseinheit WHERE benutzer_id = ? ORDER BY erstellt_um DESC LIMIT 4",
+        "SELECT * FROM trainingseinheit WHERE benutzer_id = ? ORDER BY erstellt_um DESC LIMIT 3",
         (benutzer_id,),
     ).fetchall()
+    muskelgruppe_je_uebung_dashboard = {
+        zeile["name"]: zeile["muskelgruppe"] or "Sonstiges"
+        for zeile in conn.execute(
+            "SELECT name, muskelgruppe FROM uebungen WHERE benutzer_id = ?", (benutzer_id,)
+        ).fetchall()
+    }
     letzte_trainings = []
     for einheit in letzte_einheiten:
         uebungen_namen = conn.execute(
             "SELECT DISTINCT uebung FROM trainingssatz WHERE trainingseinheit_id = ?",
             (einheit["id"],),
         ).fetchall()
+        gruppen_dieser_einheit = {
+            muskelgruppe_je_uebung_dashboard.get(u["uebung"], "Sonstiges") for u in uebungen_namen
+        }
+        gruppen_sortiert = [g for g in MUSKELGRUPPEN if g in gruppen_dieser_einheit]
         letzte_trainings.append({
             "id": einheit["id"],
             "datum": einheit["datum"],
-            "uebungen": [u["uebung"] for u in uebungen_namen],
+            "muskelgruppen": gruppen_sortiert,
             "dauer": formatiere_dauer(einheit["erstellt_um"], einheit["beendet_um"]),
         })
 
