@@ -24,6 +24,33 @@
     <p class="muted">Noch keine Drenings eingetragen.</p>
 {% endif %}
 
+<h2 class="section-heading">Volumen-Trend (letzte 12 Wochen)</h2>
+<div class="card chart-card">
+    <div class="chart-inner-klein">
+        <canvas id="volumen-trend-chart"></canvas>
+    </div>
+</div>
+
+<h2 class="section-heading">Muskelgruppen-Verteilung (letzte 7 Tage)</h2>
+<p class="muted"><a href="{{ url_for('uebungen_muskelgruppen') }}" class="link">Muskelgruppen zuordnen/korrigieren &rarr;</a></p>
+{% if muskelgruppen_verteilung %}
+<div class="card">
+    {% for eintrag in muskelgruppen_verteilung %}
+    <div class="muskelgruppen-zeile">
+        <div class="muskelgruppen-kopf">
+            <span>{{ eintrag["gruppe"] }}</span>
+            <span class="muted">{{ eintrag["volumen"] }} kg ({{ eintrag["prozent"] }}%)</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ eintrag['prozent'] }}%;"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="muted">Noch keine Drenings in den letzten 7 Tagen.</p>
+{% endif %}
+
 <h2 class="section-heading">Übungen</h2>
 <form method="get" class="form" id="uebung-auswahl-form">
     <label for="uebung-auswahl">Übung</label>
@@ -77,6 +104,26 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    // Volumen-Trend: läuft immer, unabhängig von einer ausgewählten Übung.
+    const wochenLabels = {{ wochen_labels_json | safe }};
+    const wochenWerte = {{ wochen_werte_json | safe }};
+    new Chart(document.getElementById("volumen-trend-chart"), {
+        type: "bar",
+        data: {
+            labels: wochenLabels,
+            datasets: [{ label: "Volumen (kg)", data: wochenWerte, backgroundColor: "#2563eb" }],
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { ticks: { font: { size: 10 } } },
+            },
+        },
+    });
+</script>
 {% if uebungs_daten %}
 <script>
     const chartDaten = {{ chart_daten_json | safe }};

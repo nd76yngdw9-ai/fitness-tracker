@@ -8,9 +8,23 @@
     <label for="datum">Datum</label>
     <input type="date" id="datum" name="datum" value="{{ heute }}" required>
 
+    {% if vorlagen %}
+    <label for="vorlage_id">Vorlage (optional)</label>
+    <select id="vorlage_id" name="vorlage_id">
+        <option value="">Keine -- Übungen frei hinzufügen</option>
+        {% for v in vorlagen %}
+        <option value="{{ v['id'] }}">{{ v["name"] }}</option>
+        {% endfor %}
+    </select>
+    {% endif %}
+
     <button type="submit">Drening starten</button>
 </form>
 
 <p class="trainings-spruch">{{ spruch }}</p>
+
+<p class="muted" style="text-align: center; margin-top: 20px;">
+    <a href="{{ url_for('vorlagen') }}" class="link">Vorlagen verwalten &rarr;</a>
+</p>
 
 {% endblock %}

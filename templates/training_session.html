@@ -6,6 +6,11 @@
 
 {% if uebungen_gruppiert %}
     <p class="muted">Gesamtvolumen: {{ gesamtvolumen }} kg (Gewicht × Wiederholungen, aufsummiert)</p>
+    <p class="muted">
+        <a href="{{ url_for('vorlage_neu', vorschlag=uebungen_gruppiert.keys() | join('\n')) }}" class="link">
+            Diese Übungen als Vorlage speichern &rarr;
+        </a>
+    </p>
 
     {% for uebung, saetze in uebungen_gruppiert.items() %}
     <div class="card">

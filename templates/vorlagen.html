@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Trainingsvorlagen{% endblock %}
+{% block content %}
+
+<h1>Trainingsvorlagen</h1>
+<p class="muted">Feste Splits (z.B. "Push Day"), die du beim Start eines
+neuen Trainings auswählen kannst -- die Übungen erscheinen dann als
+Schnellauswahl.</p>
+
+{% if vorlagen %}
+    {% for v in vorlagen %}
+    <div class="card">
+        <h2>{{ v["name"] }}</h2>
+        {% if v["uebungen"] %}
+        <p class="muted">{{ v["uebungen"] | join(", ") }}</p>
+        {% else %}
+        <p class="muted">Keine Übungen hinterlegt.</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('vorlage_loeschen', vorlage_id=v['id']) }}"
+              onsubmit="return confirm('Vorlage {{ v['name'] }} löschen?');">
+            <button type="submit" class="danger-link">Löschen</button>
+        </form>
+    </div>
+    {% endfor %}
+{% else %}
+    <p class="muted">Noch keine Vorlagen angelegt.</p>
+{% endif %}
+
+<a href="{{ url_for('vorlage_neu') }}" class="secondary-button add-uebung-button">
+    + Neue Vorlage
+</a>
+
+<a href="{{ url_for('training_neu') }}" class="link" style="display:block; text-align:center; margin-top: 12px;">
+    &larr; Zurück
+</a>
+
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Neue Vorlage{% endblock %}
+{% block content %}
+
+<h1>Neue Trainingsvorlage</h1>
+
+<form method="post" class="form">
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" placeholder="z.B. Push Day" required autofocus>
+
+    <label for="uebungen_text">Übungen (eine pro Zeile)</label>
+    <textarea id="uebungen_text" name="uebungen_text" rows="8"
+              placeholder="Bankdrücken&#10;Schulterdrücken&#10;Trizepsdrücken Kabel">{{ vorschlag }}</textarea>
+
+    <button type="submit">Vorlage speichern</button>
+</form>
+
+<a href="{{ url_for('vorlagen') }}" class="link" style="display:block; text-align:center; margin-top: 12px;">
+    &larr; Zurück zu den Vorlagen
+</a>
+
+{% endblock %}

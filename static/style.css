@@ -612,3 +612,55 @@ input[type="date"] {
     font-size: 1.1rem;
     pointer-events: none;
 }
+
+.pausen-timer-box {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-top: 10px;
+}
+
+.pausen-timer-anzeige {
+    font-size: 1.3rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary);
+}
+
+.form textarea {
+    font-size: 1rem;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    color: var(--text);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.chart-inner-klein {
+    height: 220px;
+}
+
+.muskelgruppen-zeile {
+    margin-bottom: 12px;
+}
+
+.muskelgruppen-zeile:last-child {
+    margin-bottom: 0;
+}
+
+.muskelgruppen-kopf {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+}

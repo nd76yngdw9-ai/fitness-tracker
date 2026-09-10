@@ -3,7 +3,9 @@
 Ein selbstgebautes Web-Tool für Körpergewicht, Ernährung (kcal + Makros)
 und Trainingslogs mit Verlaufsdiagrammen, berechneter Maximalleistung
 (e1RM), 3-Monats-Gewichtsprojektion, Benutzerkonten für mehrere Personen,
-Wochenrückblick, Trainings-Kalender, CSV-Export und Dunkelmodus.
+Trainingsvorlagen (Splits), Pausentimer, Volumen-Trend, Muskelgruppen-
+Verteilung, Wochenrückblick, Trainings-Kalender, CSV-Export, API für
+Sprachassistenten und Dunkelmodus.
 
 ## Projektstruktur
 

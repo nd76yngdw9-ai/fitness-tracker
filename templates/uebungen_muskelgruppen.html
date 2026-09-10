@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Muskelgruppen{% endblock %}
+{% block content %}
+
+<h1>Muskelgruppen zuordnen</h1>
+<p class="muted">Wurde automatisch anhand des Übungsnamens geraten --
+hier bei Bedarf korrigieren.</p>
+
+<form method="post" class="form">
+    {% for u in uebungen %}
+    <label for="muskelgruppe_{{ u['id'] }}">{{ u["name"] }}</label>
+    <select id="muskelgruppe_{{ u['id'] }}" name="muskelgruppe_{{ u['id'] }}">
+        {% for g in muskelgruppen %}
+        <option value="{{ g }}" {% if g == u['muskelgruppe'] %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+    </select>
+    {% endfor %}
+
+    <button type="submit">Speichern</button>
+</form>
+
+<a href="{{ url_for('verlauf') }}" class="link" style="display:block; text-align:center; margin-top: 14px;">
+    &larr; Zurück zum Verlauf
+</a>
+
+{% endblock %}

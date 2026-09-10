@@ -296,6 +296,41 @@ def init_db():
         )
     """)
 
+    # --- Muskelgruppe je Übung -- optionales Feld, wird beim ersten
+    #     Anlegen einer Übung anhand des Namens bestmöglich geraten
+    #     (siehe rate_muskelgruppe) und ist danach frei änderbar. ---
+    uebungen_spalten = [r["name"] for r in conn.execute("PRAGMA table_info(uebungen)")]
+    if "muskelgruppe" not in uebungen_spalten:
+        conn.execute("ALTER TABLE uebungen ADD COLUMN muskelgruppe TEXT")
+    # Für Übungen von VOR diesem Feature (haben noch keine Muskelgruppe):
+    # einmalig nachträglich raten, statt sie leer zu lassen.
+    ungeratene_uebungen = conn.execute(
+        "SELECT id, name FROM uebungen WHERE muskelgruppe IS NULL"
+    ).fetchall()
+    for zeile in ungeratene_uebungen:
+        conn.execute(
+            "UPDATE uebungen SET muskelgruppe = ? WHERE id = ?",
+            (rate_muskelgruppe(zeile["name"]), zeile["id"]),
+        )
+
+    # --- Trainingsvorlagen (Splits): eine Vorlage hat einen Namen und
+    #     enthält beliebig viele Übungsnamen in fester Reihenfolge. ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trainingsvorlage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            benutzer_id INTEGER NOT NULL,
+            name TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trainingsvorlage_uebung (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vorlage_id INTEGER NOT NULL REFERENCES trainingsvorlage(id),
+            uebung TEXT NOT NULL,
+            reihenfolge INTEGER NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -332,6 +367,32 @@ TRAININGS_SPRUECHE = [
     "Zu schwer gibt's net, nur zu schwach",
     "Du bist was du frisst. Und wenn du Scheiße frisst, dann siehst du aus wie eine Fotze!",
 ]
+
+
+# Feste Liste möglicher Muskelgruppen, u.a. für Dropdown-Menüs.
+MUSKELGRUPPEN = ["Brust", "Rücken", "Beine", "Schultern", "Arme", "Bauch", "Sonstiges"]
+
+# Schlüsselwörter (kleingeschrieben) je Muskelgruppe -- fürs automatische
+# Vorschlagen beim erstmaligen Anlegen einer Übung. Reine Bequemlichkeit,
+# jederzeit von Hand änderbar.
+_MUSKELGRUPPEN_SCHLUESSELWOERTER = {
+    "Brust": ["bank", "brust", "butterfly", "fliegende", "dips"],
+    "Rücken": ["latzug", "rudern", "kreuzheben", "pulldown", "rücken", "klimmzug"],
+    "Beine": ["kniebeuge", "beinpresse", "bein", "wade", "squat", "ausfallschritt"],
+    "Schultern": ["schulter", "seitheben", "military", "nackendrücken"],
+    "Arme": ["bizeps", "trizeps", "curl", "arm", "hammercurl"],
+    "Bauch": ["bauch", "crunch", "plank", "sit-up"],
+}
+
+
+def rate_muskelgruppe(uebungsname):
+    """Schlägt anhand von Schlüsselwörtern im Namen eine Muskelgruppe vor
+    -- nur eine Starthilfe, keine Garantie. "Sonstiges", falls nichts passt."""
+    name_klein = uebungsname.lower()
+    for gruppe, schluesselwoerter in _MUSKELGRUPPEN_SCHLUESSELWOERTER.items():
+        if any(wort in name_klein for wort in schluesselwoerter):
+            return gruppe
+    return "Sonstiges"
 
 
 def get_einstellungen(conn, benutzer_id):
@@ -455,8 +516,8 @@ def registrieren():
             (neue_benutzer_id, ZIELGEWICHT_STANDARD, KALORIENZIEL_STANDARD, secrets.token_urlsafe(24)),
         )
         conn.executemany(
-            "INSERT OR IGNORE INTO uebungen (benutzer_id, name) VALUES (?, ?)",
-            [(neue_benutzer_id, name) for name in STANDARD_UEBUNGEN],
+            "INSERT OR IGNORE INTO uebungen (benutzer_id, name, muskelgruppe) VALUES (?, ?, ?)",
+            [(neue_benutzer_id, name, rate_muskelgruppe(name)) for name in STANDARD_UEBUNGEN],
         )
         conn.commit()
         conn.close()
@@ -948,22 +1009,37 @@ def ernaehrung_loeschen(datum):
 @app.route("/training/neu", methods=["GET", "POST"])
 def training_neu():
     """Startet ein neues Training (den 'Container' für die Übungen von
-    heute) und leitet direkt in die Trainingsansicht weiter."""
+    heute) und leitet direkt in die Trainingsansicht weiter. Optional kann
+    eine gespeicherte Vorlage (Split) ausgewählt werden, deren Übungen dann
+    dort als Schnellauswahl vorgeschlagen werden."""
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+
     if request.method == "POST":
-        conn = get_db()
         cursor = conn.execute(
             "INSERT INTO trainingseinheit (benutzer_id, datum, erstellt_um) VALUES (?, ?, ?)",
-            (aktueller_benutzer_id(), request.form["datum"], datetime.now().isoformat()),
+            (benutzer_id, request.form["datum"], datetime.now().isoformat()),
         )
         neue_id = cursor.lastrowid
         conn.commit()
         conn.close()
+
+        vorlage_id = request.form.get("vorlage_id")
+        if vorlage_id:
+            return redirect(url_for("training_session", einheit_id=neue_id, vorlage=vorlage_id))
         return redirect(url_for("training_session", einheit_id=neue_id))
+
+    vorlagen = conn.execute(
+        "SELECT id, name FROM trainingsvorlage WHERE benutzer_id = ? ORDER BY name",
+        (benutzer_id,),
+    ).fetchall()
+    conn.close()
 
     return render_template(
         "training_neu.html",
         heute=date.today().isoformat(),
         spruch=random.choice(TRAININGS_SPRUECHE),
+        vorlagen=vorlagen,
     )
 
 
@@ -1001,23 +1077,40 @@ def training_session(einheit_id):
         for name, saetze_liste in uebungen_gruppiert.items()
     }
 
-    # Falls noch keine Übung eingetragen ist: Vorlage vom letzten Training
-    # dieses Benutzers anbieten (nur die Übungsnamen, keine Gewichte).
+    # Falls noch keine Übung eingetragen ist: entweder die per ?vorlage=
+    # ausgewählte Trainingsvorlage vorschlagen, oder ersatzweise die
+    # Übungen vom letzten Training dieses Benutzers (nur die Namen, keine
+    # Gewichte).
     vorlage_uebungen = []
     if not uebungen_gruppiert:
-        letztes_anderes_training = conn.execute(
-            """SELECT id FROM trainingseinheit
-               WHERE benutzer_id = ? AND id != ?
-               ORDER BY erstellt_um DESC LIMIT 1""",
-            (benutzer_id, einheit_id),
-        ).fetchone()
-        if letztes_anderes_training:
-            namen = conn.execute(
-                """SELECT DISTINCT uebung, MIN(id) AS erste_id FROM trainingssatz
-                   WHERE trainingseinheit_id = ? GROUP BY uebung ORDER BY erste_id""",
-                (letztes_anderes_training["id"],),
-            ).fetchall()
-            vorlage_uebungen = [n["uebung"] for n in namen]
+        vorlage_id = request.args.get("vorlage", type=int)
+        if vorlage_id:
+            gehoert_mir = conn.execute(
+                "SELECT id FROM trainingsvorlage WHERE id = ? AND benutzer_id = ?",
+                (vorlage_id, benutzer_id),
+            ).fetchone()
+            if gehoert_mir:
+                namen = conn.execute(
+                    """SELECT uebung FROM trainingsvorlage_uebung
+                       WHERE vorlage_id = ? ORDER BY reihenfolge""",
+                    (vorlage_id,),
+                ).fetchall()
+                vorlage_uebungen = [n["uebung"] for n in namen]
+
+        if not vorlage_uebungen:
+            letztes_anderes_training = conn.execute(
+                """SELECT id FROM trainingseinheit
+                   WHERE benutzer_id = ? AND id != ?
+                   ORDER BY erstellt_um DESC LIMIT 1""",
+                (benutzer_id, einheit_id),
+            ).fetchone()
+            if letztes_anderes_training:
+                namen = conn.execute(
+                    """SELECT DISTINCT uebung, MIN(id) AS erste_id FROM trainingssatz
+                       WHERE trainingseinheit_id = ? GROUP BY uebung ORDER BY erste_id""",
+                    (letztes_anderes_training["id"],),
+                ).fetchall()
+                vorlage_uebungen = [n["uebung"] for n in namen]
 
     conn.close()
 
@@ -1079,8 +1172,8 @@ def training_uebung_neu(einheit_id):
         )
 
         conn.execute(
-            "INSERT OR IGNORE INTO uebungen (benutzer_id, name) VALUES (?, ?)",
-            (benutzer_id, uebung),
+            "INSERT OR IGNORE INTO uebungen (benutzer_id, name, muskelgruppe) VALUES (?, ?, ?)",
+            (benutzer_id, uebung, rate_muskelgruppe(uebung)),
         )
 
         satznummer = 0
@@ -1138,6 +1231,123 @@ def training_uebung_loeschen(einheit_id, uebung):
         conn.commit()
     conn.close()
     return redirect(url_for("training_session", einheit_id=einheit_id))
+
+
+# ---------------------------------------------------------------------
+# Trainingsvorlagen (Splits)
+# ---------------------------------------------------------------------
+
+@app.route("/vorlagen")
+def vorlagen():
+    """Übersicht aller gespeicherten Trainingsvorlagen dieses Benutzers,
+    jeweils mit ihren Übungen."""
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+    vorlagen_rohdaten = conn.execute(
+        "SELECT * FROM trainingsvorlage WHERE benutzer_id = ? ORDER BY name",
+        (benutzer_id,),
+    ).fetchall()
+
+    vorlagen_mit_uebungen = []
+    for vorlage in vorlagen_rohdaten:
+        uebungen_namen = conn.execute(
+            "SELECT uebung FROM trainingsvorlage_uebung WHERE vorlage_id = ? ORDER BY reihenfolge",
+            (vorlage["id"],),
+        ).fetchall()
+        vorlagen_mit_uebungen.append({
+            "id": vorlage["id"],
+            "name": vorlage["name"],
+            "uebungen": [u["uebung"] for u in uebungen_namen],
+        })
+    conn.close()
+
+    return render_template("vorlagen.html", vorlagen=vorlagen_mit_uebungen)
+
+
+@app.route("/vorlagen/neu", methods=["GET", "POST"])
+def vorlage_neu():
+    """Legt eine neue Trainingsvorlage an. Die Übungen werden als
+    einfacher Text eingegeben, eine pro Zeile -- deutlich schneller zu
+    bedienen als einzelne Formularfelder pro Übung."""
+    benutzer_id = aktueller_benutzer_id()
+
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        uebungen_text = request.form.get("uebungen_text", "")
+        uebungen_liste = [zeile.strip() for zeile in uebungen_text.splitlines() if zeile.strip()]
+
+        conn = get_db()
+        cursor = conn.execute(
+            "INSERT INTO trainingsvorlage (benutzer_id, name) VALUES (?, ?)",
+            (benutzer_id, name),
+        )
+        vorlage_id = cursor.lastrowid
+        for reihenfolge, uebung in enumerate(uebungen_liste, start=1):
+            conn.execute(
+                "INSERT INTO trainingsvorlage_uebung (vorlage_id, uebung, reihenfolge) VALUES (?, ?, ?)",
+                (vorlage_id, uebung, reihenfolge),
+            )
+            # Neue Übungsnamen direkt auch zur normalen Übungs-Vorauswahl
+            # hinzufügen, damit sie z.B. beim Diktieren/Eintippen sofort
+            # als Vorschlag erscheinen.
+            conn.execute(
+                "INSERT OR IGNORE INTO uebungen (benutzer_id, name, muskelgruppe) VALUES (?, ?, ?)",
+                (benutzer_id, uebung, rate_muskelgruppe(uebung)),
+            )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("vorlagen"))
+
+    # Übers ?vorschlag=-Feld (z.B. von der Trainingsübersicht aus) lässt
+    # sich das Textfeld mit den Übungen eines bestehenden Trainings
+    # vorausfüllen.
+    vorschlag = request.args.get("vorschlag", "")
+    return render_template("vorlage_neu.html", vorschlag=vorschlag)
+
+
+@app.route("/vorlagen/<int:vorlage_id>/loeschen", methods=["POST"])
+def vorlage_loeschen(vorlage_id):
+    conn = get_db()
+    gehoert_mir = conn.execute(
+        "SELECT id FROM trainingsvorlage WHERE id = ? AND benutzer_id = ?",
+        (vorlage_id, aktueller_benutzer_id()),
+    ).fetchone()
+    if gehoert_mir:
+        conn.execute("DELETE FROM trainingsvorlage_uebung WHERE vorlage_id = ?", (vorlage_id,))
+        conn.execute("DELETE FROM trainingsvorlage WHERE id = ?", (vorlage_id,))
+        conn.commit()
+    conn.close()
+    return redirect(url_for("vorlagen"))
+
+
+@app.route("/uebungen/muskelgruppen", methods=["GET", "POST"])
+def uebungen_muskelgruppen():
+    """Übersicht aller eigenen Übungen mit ihrer (automatisch geratenen)
+    Muskelgruppe -- hier lässt sich das bei Bedarf von Hand korrigieren."""
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+
+    if request.method == "POST":
+        for schluessel, wert in request.form.items():
+            if schluessel.startswith("muskelgruppe_"):
+                uebung_id = schluessel.removeprefix("muskelgruppe_")
+                conn.execute(
+                    "UPDATE uebungen SET muskelgruppe = ? WHERE id = ? AND benutzer_id = ?",
+                    (wert, uebung_id, benutzer_id),
+                )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("verlauf"))
+
+    uebungen_liste = conn.execute(
+        "SELECT id, name, muskelgruppe FROM uebungen WHERE benutzer_id = ? ORDER BY name",
+        (benutzer_id,),
+    ).fetchall()
+    conn.close()
+
+    return render_template(
+        "uebungen_muskelgruppen.html", uebungen=uebungen_liste, muskelgruppen=MUSKELGRUPPEN
+    )
 
 
 @app.route("/verlauf")
@@ -1210,6 +1420,60 @@ def verlauf():
         }
         alle_chart_labels = sorted(chart_labels_menge)
 
+    # --- Volumen-Trend: Gesamtvolumen je Kalenderwoche, letzte 12 Wochen ---
+    alle_saetze_fuer_volumen = conn.execute("""
+        SELECT te.datum AS datum, ts.gewicht, ts.wiederholungen
+        FROM trainingssatz ts
+        JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
+        WHERE te.benutzer_id = ?
+    """, (benutzer_id,)).fetchall()
+
+    volumen_je_woche = {}
+    for satz in alle_saetze_fuer_volumen:
+        jahr, woche, _ = date.fromisoformat(satz["datum"]).isocalendar()
+        schluessel = (jahr, woche)
+        volumen_je_woche[schluessel] = volumen_je_woche.get(schluessel, 0) + satz["gewicht"] * satz["wiederholungen"]
+
+    wochen_labels = []
+    wochen_werte = []
+    for i in range(11, -1, -1):
+        ziel_datum = date.today() - timedelta(weeks=i)
+        jahr, woche, _ = ziel_datum.isocalendar()
+        wochen_labels.append(f"KW {woche}")
+        wochen_werte.append(round(volumen_je_woche.get((jahr, woche), 0)))
+
+    # --- Muskelgruppen-Verteilung: Volumen je Muskelgruppe, letzte 7 Tage ---
+    sieben_tage_start = (date.today() - timedelta(days=6)).isoformat()
+    saetze_letzte_woche = conn.execute("""
+        SELECT ts.uebung, ts.gewicht, ts.wiederholungen
+        FROM trainingssatz ts
+        JOIN trainingseinheit te ON te.id = ts.trainingseinheit_id
+        WHERE te.benutzer_id = ? AND te.datum >= ?
+    """, (benutzer_id, sieben_tage_start)).fetchall()
+
+    muskelgruppe_je_uebung = {
+        zeile["name"]: zeile["muskelgruppe"] or "Sonstiges"
+        for zeile in conn.execute(
+            "SELECT name, muskelgruppe FROM uebungen WHERE benutzer_id = ?", (benutzer_id,)
+        ).fetchall()
+    }
+    volumen_je_muskelgruppe = {}
+    for satz in saetze_letzte_woche:
+        gruppe = muskelgruppe_je_uebung.get(satz["uebung"], "Sonstiges")
+        volumen_je_muskelgruppe[gruppe] = (
+            volumen_je_muskelgruppe.get(gruppe, 0) + satz["gewicht"] * satz["wiederholungen"]
+        )
+
+    gesamtvolumen_woche = sum(volumen_je_muskelgruppe.values())
+    muskelgruppen_verteilung = [
+        {
+            "gruppe": gruppe,
+            "volumen": round(volumen),
+            "prozent": round(volumen / gesamtvolumen_woche * 100) if gesamtvolumen_woche else 0,
+        }
+        for gruppe, volumen in sorted(volumen_je_muskelgruppe.items(), key=lambda kv: -kv[1])
+    ]
+
     conn.close()
 
     chart_daten = {}
@@ -1227,6 +1491,9 @@ def verlauf():
         uebungs_daten=uebungs_daten,
         chart_daten_json=json.dumps(chart_daten, ensure_ascii=False),
         chart_labels_json=json.dumps(alle_chart_labels),
+        wochen_labels_json=json.dumps(wochen_labels),
+        wochen_werte_json=json.dumps(wochen_werte),
+        muskelgruppen_verteilung=muskelgruppen_verteilung,
     )
 
 
