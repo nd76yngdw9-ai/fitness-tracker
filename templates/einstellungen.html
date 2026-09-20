@@ -106,6 +106,35 @@
             <button type="submit" class="secondary-button">Urlaubsmodus starten</button>
         </form>
     {% endif %}
+
+    <h3 style="margin-top: 22px;">Nachträglich eintragen</h3>
+    <p class="muted">Falls du vergessen hast, den Urlaubsmodus rechtzeitig zu starten: hier
+        kannst du einen bereits vergangenen (oder auch geplanten, zukünftigen) Zeitraum direkt
+        mit Start- und Enddatum eintragen.</p>
+    <form method="post" action="{{ url_for('urlaub_nachtragen') }}" class="form">
+        <label for="nachtragen_start">Von</label>
+        <input type="date" id="nachtragen_start" name="nachtragen_start" required>
+
+        <label for="nachtragen_ende">Bis</label>
+        <input type="date" id="nachtragen_ende" name="nachtragen_ende" required>
+
+        <button type="submit" class="secondary-button">Zeitraum eintragen</button>
+    </form>
+
+    {% if urlaub_vergangene_zeitraeume %}
+        <h3 style="margin-top: 22px;">Vergangene Zeiträume</h3>
+        <ul class="list">
+            {% for zeitraum in urlaub_vergangene_zeitraeume %}
+                <li style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0;">
+                    <span>{{ zeitraum["start_datum"] }} &ndash; {{ zeitraum["end_datum"] }}</span>
+                    <form method="post" action="{{ url_for('urlaub_loeschen', zeitraum_id=zeitraum['id']) }}"
+                          onsubmit="return confirm('Diesen Urlaubszeitraum wieder löschen?');">
+                        <button type="submit" class="danger-link">Löschen</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
 </div>
 
 <p class="muted" style="margin-top: 16px;">

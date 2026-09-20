@@ -801,6 +801,11 @@ def einstellungen():
     aktuelle_werte = get_einstellungen(conn, benutzer_id)
     api_token = hole_oder_erzeuge_api_token(conn, benutzer_id)
     urlaub_aktiv = urlaub_aktives_intervall(conn, benutzer_id)
+    urlaub_vergangene_zeitraeume = conn.execute(
+        """SELECT * FROM urlaubszeitraum WHERE benutzer_id = ? AND end_datum IS NOT NULL
+           ORDER BY start_datum DESC""",
+        (benutzer_id,),
+    ).fetchall()
     conn.close()
     return render_template(
         "einstellungen.html",
@@ -808,6 +813,8 @@ def einstellungen():
         benutzername=session.get("benutzername"),
         api_token=api_token,
         urlaub_aktiv=urlaub_aktiv,
+        urlaub_vergangene_zeitraeume=urlaub_vergangene_zeitraeume,
+        heute=date.today().isoformat(),
     )
 
 
@@ -833,6 +840,47 @@ def urlaub_beenden():
     conn.execute(
         "UPDATE urlaubszeitraum SET end_datum = ? WHERE benutzer_id = ? AND end_datum IS NULL",
         (date.today().isoformat(), benutzer_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("einstellungen"))
+
+
+@app.route("/einstellungen/urlaub/nachtragen", methods=["POST"])
+def urlaub_nachtragen():
+    """Trägt nachträglich einen abgeschlossenen Urlaubszeitraum ein (z.B. falls
+    man vergessen hat, den Urlaubsmodus rechtzeitig zu starten). Start- und
+    Enddatum werden beide fest gesetzt -- im Gegensatz zu urlaub_starten() legt
+    das hier also nie ein offenes/laufendes Intervall (end_datum NULL) an.
+    Überschneidungen mit bestehenden Zeiträumen sind bewusst erlaubt: die
+    Urlaubstage werden ohnehin als Menge (Set) gebildet, doppelte Tage zählen
+    dabei automatisch nur einmal."""
+    benutzer_id = aktueller_benutzer_id()
+    start_datum = request.form.get("nachtragen_start", "").strip()
+    end_datum = request.form.get("nachtragen_ende", "").strip()
+
+    if start_datum and end_datum and date.fromisoformat(end_datum) >= date.fromisoformat(start_datum):
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO urlaubszeitraum (benutzer_id, start_datum, end_datum) VALUES (?, ?, ?)",
+            (benutzer_id, start_datum, end_datum),
+        )
+        conn.commit()
+        conn.close()
+
+    return redirect(url_for("einstellungen"))
+
+
+@app.route("/einstellungen/urlaub/loeschen/<int:zeitraum_id>", methods=["POST"])
+def urlaub_loeschen(zeitraum_id):
+    """Löscht einen (abgeschlossenen) Urlaubszeitraum wieder, z.B. falls beim
+    Nachtragen ein falsches Datum erwischt wurde. Nur der eigene Zeitraum des
+    aktuellen Benutzers kann gelöscht werden."""
+    benutzer_id = aktueller_benutzer_id()
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM urlaubszeitraum WHERE id = ? AND benutzer_id = ?",
+        (zeitraum_id, benutzer_id),
     )
     conn.commit()
     conn.close()
