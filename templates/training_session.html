@@ -4,6 +4,11 @@
 
 <h1>Drening – {{ einheit["datum"] }}</h1>
 
+<div class="pausen-timer-box" id="pausen-timer-box" data-einheit-id="{{ einheit['id'] }}" hidden>
+    <span class="muted">Pause seit letztem Satz</span>
+    <span class="pausen-timer-anzeige" id="pausen-timer-anzeige">0:00</span>
+</div>
+
 {% if uebungen_gruppiert %}
     <p class="muted">Gesamtvolumen: {{ gesamtvolumen }} kg (Gewicht × Wiederholungen, aufsummiert)</p>
     <p class="muted">
@@ -50,13 +55,17 @@
     + Übung hinzufügen
 </a>
 
-<form method="post" action="{{ url_for('training_abschliessen', einheit_id=einheit['id']) }}" class="fertig-link">
+<form method="post" action="{{ url_for('training_abschliessen', einheit_id=einheit['id']) }}" class="fertig-link" onsubmit="pausenTimerLoeschen();">
     <button type="submit" class="link fertig-button">Drening abschließen &amp; zum Dashboard</button>
 </form>
 
 <form method="post" action="{{ url_for('training_loeschen', einheit_id=einheit['id']) }}"
-      onsubmit="return confirm('Das komplette Drening mit allen Übungen löschen?');">
+      onsubmit="if (!confirm('Das komplette Drening mit allen Übungen löschen?')) return false; pausenTimerLoeschen();">
     <button type="submit" class="danger-link">Ganzes Drening löschen</button>
 </form>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='pausentimer.js') }}"></script>
 {% endblock %}

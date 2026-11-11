@@ -21,7 +21,7 @@
 
     <div id="letzte-leistung" class="muted letzte-leistung"></div>
 
-    <div class="pausen-timer-box" id="pausen-timer-box" hidden>
+    <div class="pausen-timer-box" id="pausen-timer-box" data-einheit-id="{{ einheit['id'] }}" hidden>
         <span class="muted">Pause seit letztem Satz</span>
         <span class="pausen-timer-anzeige" id="pausen-timer-anzeige">0:00</span>
     </div>
@@ -52,6 +52,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='pausentimer.js') }}"></script>
 <script>
     // Vom Server mitgegeben: für jede bekannte Übung die zuletzt eingetragene
     // Leistung, damit wir sie ohne Serveranfrage sofort anzeigen können.
@@ -63,31 +64,9 @@
     const uebungInput = document.getElementById("uebung");
     const letzteLeistungAnzeige = document.getElementById("letzte-leistung");
 
-    // --- Pausentimer: reine Stoppuhr, kein Alarm/Ton. Startet (bzw. setzt
-    // sich zurück auf 0:00), sobald in einer Satz-Zeile sowohl Gewicht als
-    // auch Wiederholungen ausgefüllt sind und das Wdh.-Feld verlassen wird
-    // -- das ist der Moment, in dem ein Satz als "eingetragen" gilt. ---
-    const timerBox = document.getElementById("pausen-timer-box");
-    const timerAnzeige = document.getElementById("pausen-timer-anzeige");
-    let timerIntervallId = null;
-    let timerStartZeit = null;
-
-    function pausenTimerStarten() {
-        timerStartZeit = Date.now();
-        timerBox.hidden = false;
-        if (timerIntervallId) {
-            clearInterval(timerIntervallId);
-        }
-        timerIntervallId = setInterval(pausenTimerAktualisieren, 1000);
-        pausenTimerAktualisieren();
-    }
-
-    function pausenTimerAktualisieren() {
-        const vergangeneSekunden = Math.floor((Date.now() - timerStartZeit) / 1000);
-        const minuten = Math.floor(vergangeneSekunden / 60);
-        const sekunden = vergangeneSekunden % 60;
-        timerAnzeige.textContent = minuten + ":" + String(sekunden).padStart(2, "0");
-    }
+    // Pausentimer: Logik in static/pausentimer.js. Er startet (bzw. setzt sich
+    // auf 0:00 zurück), sobald in einer Satz-Zeile Gewicht und Wiederholungen
+    // ausgefüllt sind und das Wdh.-Feld verlassen wird.
 
     function satzZeileHinzufuegen() {
         const neueZeile = vorlage.content.cloneNode(true);
@@ -120,6 +99,17 @@
     uebungInput.addEventListener("input", letzteLeistungAktualisieren);
     letzteLeistungAktualisieren(); // falls das Feld schon vorausgefüllt ist
     hinzufuegenBtn.addEventListener("click", satzZeileHinzufuegen);
+
+    // Wird "Übung speichern" gedrückt, ohne dass das Wdh.-Feld verlassen wurde,
+    // zählt der zuletzt ausgefüllte Satz trotzdem als Timer-Start.
+    document.getElementById("uebung-form").addEventListener("submit", function () {
+        const zeilen = saetzeListe.querySelectorAll(".satz-zeile");
+        const hatSatz = Array.from(zeilen).some(function (z) {
+            return z.querySelector('input[name="gewicht[]"]').value.trim()
+                && z.querySelector('input[name="wiederholungen[]"]').value.trim();
+        });
+        if (hatSatz) pausenTimerStarten();
+    });
 
     // Mit 3 leeren Sätzen starten -- deckt den häufigsten Fall ab.
     satzZeileHinzufuegen();
